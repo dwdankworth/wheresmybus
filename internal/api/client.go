@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strings"
 )
 
 const baseURL = "https://api.pugetsound.onebusaway.org"
@@ -146,7 +147,7 @@ func resolveStopID(client *http.Client, apiBaseURL, apiKey, stopRef string) (str
 		return matches[0], nil
 	default:
 		sort.Strings(matches)
-		return "", fmt.Errorf("stop code %s matched multiple Puget Sound stop IDs: %s; use a full stop ID", stopRef, joinCommaSeparated(matches))
+		return "", fmt.Errorf("stop code %s matched multiple Puget Sound stop IDs: %s; use a full stop ID", stopRef, strings.Join(matches, ", "))
 	}
 }
 
@@ -256,18 +257,6 @@ func isBareStopCode(stopRef string) bool {
 		}
 	}
 	return true
-}
-
-func joinCommaSeparated(values []string) string {
-	if len(values) == 0 {
-		return ""
-	}
-
-	result := values[0]
-	for _, value := range values[1:] {
-		result += ", " + value
-	}
-	return result
 }
 
 func deduplicateArrivals(arrivals []Arrival) []Arrival {
