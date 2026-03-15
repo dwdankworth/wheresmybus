@@ -126,10 +126,70 @@ func TestParseDarwinSSID_CommandFails(t *testing.T) {
 	}
 }
 
-func TestParseWSLSSID_Connected(t *testing.T) {
+// --- PowerShell-based WSL tests ---
+
+func TestParsePowerShellSSID_Connected(t *testing.T) {
 	orig := runner
 	t.Cleanup(func() { runner = orig })
-	runner = mockRunner{output: []byte("    Name                   : Wi-Fi\r\n    Description            : Intel(R) Wi-Fi 6 AX201 160MHz\r\n    GUID                   : abcdef\r\n    Physical address       : aa:bb:cc:dd:ee:ff\r\n    State                  : connected\r\n    SSID                   : MyHomeNetwork\r\n    BSSID                  : aa:bb:cc:dd:ee:ff\r\n    Network type           : Infrastructure\r\n")}
+	runner = mockRunner{output: []byte("MyHomeNetwork\r\n")}
+
+	ssid, err := currentSSIDPowerShell()
+	if err != nil {
+		t.Fatalf("currentSSIDPowerShell() error = %v", err)
+	}
+	if ssid != "MyHomeNetwork" {
+		t.Fatalf("currentSSIDPowerShell() = %q, want %q", ssid, "MyHomeNetwork")
+	}
+}
+
+func TestParsePowerShellSSID_Disconnected(t *testing.T) {
+	orig := runner
+	t.Cleanup(func() { runner = orig })
+	runner = mockRunner{output: []byte("\r\n")}
+
+	ssid, err := currentSSIDPowerShell()
+	if err != nil {
+		t.Fatalf("currentSSIDPowerShell() error = %v", err)
+	}
+	if ssid != "" {
+		t.Fatalf("currentSSIDPowerShell() = %q, want empty string", ssid)
+	}
+}
+
+func TestParsePowerShellSSID_CommandFails(t *testing.T) {
+	orig := runner
+	t.Cleanup(func() { runner = orig })
+	runner = mockRunner{err: errors.New("command failed")}
+
+	ssid, err := currentSSIDPowerShell()
+	if err == nil {
+		t.Fatal("currentSSIDPowerShell() expected error, got nil")
+	}
+	if ssid != "" {
+		t.Fatalf("currentSSIDPowerShell() = %q, want empty string", ssid)
+	}
+}
+
+// --- WSL integration tests (PowerShell → netsh fallback) ---
+
+type sequenceRunner struct {
+	calls   int
+	outputs []mockRunner
+}
+
+func (s *sequenceRunner) Output(name string, args ...string) ([]byte, error) {
+	i := s.calls
+	s.calls++
+	if i < len(s.outputs) {
+		return s.outputs[i].output, s.outputs[i].err
+	}
+	return nil, errors.New("no more mock outputs")
+}
+
+func TestWSL_PowerShellSucceeds(t *testing.T) {
+	orig := runner
+	t.Cleanup(func() { runner = orig })
+	runner = mockRunner{output: []byte("MyHomeNetwork\r\n")}
 
 	ssid, err := currentSSIDWSL()
 	if err != nil {
@@ -140,24 +200,47 @@ func TestParseWSLSSID_Connected(t *testing.T) {
 	}
 }
 
-func TestParseWSLSSID_Disconnected(t *testing.T) {
+func TestWSL_PowerShellFails_FallsBackToNetsh(t *testing.T) {
 	orig := runner
 	t.Cleanup(func() { runner = orig })
-	runner = mockRunner{output: []byte("    Name                   : Wi-Fi\r\n    Description            : Intel(R) Wi-Fi 6 AX201 160MHz\r\n    State                  : disconnected\r\n")}
+	runner = &sequenceRunner{outputs: []mockRunner{
+		{err: errors.New("powershell not found")},
+		{output: []byte("    SSID                   : NetshNetwork\r\n    BSSID                  : aa:bb:cc:dd:ee:ff\r\n")},
+	}}
 
 	ssid, err := currentSSIDWSL()
 	if err != nil {
 		t.Fatalf("currentSSIDWSL() error = %v", err)
 	}
-	if ssid != "" {
-		t.Fatalf("currentSSIDWSL() = %q, want empty string", ssid)
+	if ssid != "NetshNetwork" {
+		t.Fatalf("currentSSIDWSL() = %q, want %q", ssid, "NetshNetwork")
 	}
 }
 
-func TestParseWSLSSID_CommandFails(t *testing.T) {
+func TestWSL_PowerShellEmpty_FallsBackToNetsh(t *testing.T) {
 	orig := runner
 	t.Cleanup(func() { runner = orig })
-	runner = mockRunner{err: errors.New("command failed")}
+	runner = &sequenceRunner{outputs: []mockRunner{
+		{output: []byte("\r\n")},
+		{output: []byte("    SSID                   : NetshNetwork\r\n    BSSID                  : aa:bb:cc:dd:ee:ff\r\n")},
+	}}
+
+	ssid, err := currentSSIDWSL()
+	if err != nil {
+		t.Fatalf("currentSSIDWSL() error = %v", err)
+	}
+	if ssid != "NetshNetwork" {
+		t.Fatalf("currentSSIDWSL() = %q, want %q", ssid, "NetshNetwork")
+	}
+}
+
+func TestWSL_BothFail(t *testing.T) {
+	orig := runner
+	t.Cleanup(func() { runner = orig })
+	runner = &sequenceRunner{outputs: []mockRunner{
+		{err: errors.New("powershell not found")},
+		{err: errors.New("netsh not found")},
+	}}
 
 	ssid, err := currentSSIDWSL()
 	if err != nil {
@@ -168,16 +251,60 @@ func TestParseWSLSSID_CommandFails(t *testing.T) {
 	}
 }
 
-func TestParseWSLSSID_SkipsBSSID(t *testing.T) {
+// --- Netsh-only tests ---
+
+func TestParseNetshSSID_Connected(t *testing.T) {
+	orig := runner
+	t.Cleanup(func() { runner = orig })
+	runner = mockRunner{output: []byte("    Name                   : Wi-Fi\r\n    Description            : Intel(R) Wi-Fi 6 AX201 160MHz\r\n    GUID                   : abcdef\r\n    Physical address       : aa:bb:cc:dd:ee:ff\r\n    State                  : connected\r\n    SSID                   : MyHomeNetwork\r\n    BSSID                  : aa:bb:cc:dd:ee:ff\r\n    Network type           : Infrastructure\r\n")}
+
+	ssid, err := currentSSIDNetsh()
+	if err != nil {
+		t.Fatalf("currentSSIDNetsh() error = %v", err)
+	}
+	if ssid != "MyHomeNetwork" {
+		t.Fatalf("currentSSIDNetsh() = %q, want %q", ssid, "MyHomeNetwork")
+	}
+}
+
+func TestParseNetshSSID_Disconnected(t *testing.T) {
+	orig := runner
+	t.Cleanup(func() { runner = orig })
+	runner = mockRunner{output: []byte("    Name                   : Wi-Fi\r\n    Description            : Intel(R) Wi-Fi 6 AX201 160MHz\r\n    State                  : disconnected\r\n")}
+
+	ssid, err := currentSSIDNetsh()
+	if err != nil {
+		t.Fatalf("currentSSIDNetsh() error = %v", err)
+	}
+	if ssid != "" {
+		t.Fatalf("currentSSIDNetsh() = %q, want empty string", ssid)
+	}
+}
+
+func TestParseNetshSSID_CommandFails(t *testing.T) {
+	orig := runner
+	t.Cleanup(func() { runner = orig })
+	runner = mockRunner{err: errors.New("command failed")}
+
+	ssid, err := currentSSIDNetsh()
+	if err != nil {
+		t.Fatalf("currentSSIDNetsh() error = %v, want nil", err)
+	}
+	if ssid != "" {
+		t.Fatalf("currentSSIDNetsh() = %q, want empty string", ssid)
+	}
+}
+
+func TestParseNetshSSID_SkipsBSSID(t *testing.T) {
 	orig := runner
 	t.Cleanup(func() { runner = orig })
 	runner = mockRunner{output: []byte("    SSID                   : MyNetwork\r\n    BSSID                  : aa:bb:cc:dd:ee:ff\r\n")}
 
-	ssid, err := currentSSIDWSL()
+	ssid, err := currentSSIDNetsh()
 	if err != nil {
-		t.Fatalf("currentSSIDWSL() error = %v", err)
+		t.Fatalf("currentSSIDNetsh() error = %v", err)
 	}
 	if ssid != "MyNetwork" {
-		t.Fatalf("currentSSIDWSL() = %q, want %q", ssid, "MyNetwork")
+		t.Fatalf("currentSSIDNetsh() = %q, want %q", ssid, "MyNetwork")
 	}
 }

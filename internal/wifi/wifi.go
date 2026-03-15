@@ -97,6 +97,27 @@ func currentSSIDDarwin() (string, error) {
 }
 
 func currentSSIDWSL() (string, error) {
+	// PowerShell doesn't require Location Services or elevation, unlike netsh.exe.
+	ssid, err := currentSSIDPowerShell()
+	if err == nil && ssid != "" {
+		return ssid, nil
+	}
+
+	return currentSSIDNetsh()
+}
+
+func currentSSIDPowerShell() (string, error) {
+	output, err := runner.Output("powershell.exe", "-NoProfile", "-Command",
+		"(Get-NetConnectionProfile).Name")
+	if err != nil {
+		return "", err
+	}
+
+	ssid := strings.TrimSpace(strings.ReplaceAll(string(output), "\r", ""))
+	return ssid, nil
+}
+
+func currentSSIDNetsh() (string, error) {
 	output, err := runner.Output("netsh.exe", "wlan", "show", "interfaces")
 	if err != nil {
 		return "", nil
@@ -104,8 +125,6 @@ func currentSSIDWSL() (string, error) {
 
 	for _, line := range strings.Split(string(output), "\n") {
 		trimmed := strings.TrimSpace(line)
-		// Handle both "SSID" and localized "SSID" with possible leading content.
-		// The line looks like: "    SSID                   : MyNetwork"
 		if !strings.Contains(trimmed, "SSID") || strings.Contains(trimmed, "BSSID") {
 			continue
 		}
