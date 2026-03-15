@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,11 +14,12 @@ const appName = "wheresmybus"
 
 // Config contains runtime settings loaded from environment variables.
 type Config struct {
-	APIKey       string
-	HomeWifi     string
-	OfficeWifi   string
-	HomeStopID   string
-	OfficeStopID string
+	APIKey          string
+	HomeWifi        string
+	OfficeWifi      string
+	HomeStopID      string
+	OfficeStopID    string
+	DefaultLocation string
 }
 
 // ConfigDir returns the platform-specific config directory for wheresmybus.
@@ -101,22 +103,17 @@ func configFilePath() string {
 // LoadFromEnv reads configuration from environment variables.
 func LoadFromEnv() (*Config, error) {
 	cfg := &Config{
-		APIKey:       os.Getenv("OBA_API_KEY"),
-		HomeWifi:     os.Getenv("HOME_WIFI"),
-		OfficeWifi:   os.Getenv("OFFICE_WIFI"),
-		HomeStopID:   os.Getenv("HOME_STOP_ID"),
-		OfficeStopID: os.Getenv("OFFICE_STOP_ID"),
+		APIKey:          os.Getenv("OBA_API_KEY"),
+		HomeWifi:        os.Getenv("HOME_WIFI"),
+		OfficeWifi:      os.Getenv("OFFICE_WIFI"),
+		HomeStopID:      os.Getenv("HOME_STOP_ID"),
+		OfficeStopID:    os.Getenv("OFFICE_STOP_ID"),
+		DefaultLocation: os.Getenv("DEFAULT_LOCATION"),
 	}
 
 	missing := make([]string, 0, 5)
 	if cfg.APIKey == "" {
 		missing = append(missing, "OBA_API_KEY")
-	}
-	if cfg.HomeWifi == "" {
-		missing = append(missing, "HOME_WIFI")
-	}
-	if cfg.OfficeWifi == "" {
-		missing = append(missing, "OFFICE_WIFI")
 	}
 	if cfg.HomeStopID == "" {
 		missing = append(missing, "HOME_STOP_ID")
@@ -124,9 +121,24 @@ func LoadFromEnv() (*Config, error) {
 	if cfg.OfficeStopID == "" {
 		missing = append(missing, "OFFICE_STOP_ID")
 	}
+	if cfg.DefaultLocation == "" {
+		if cfg.HomeWifi == "" {
+			missing = append(missing, "HOME_WIFI")
+		}
+		if cfg.OfficeWifi == "" {
+			missing = append(missing, "OFFICE_WIFI")
+		}
+	}
 
+	problems := make([]string, 0, 2)
 	if len(missing) > 0 {
-		return nil, fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
+		problems = append(problems, fmt.Sprintf("missing required environment variables: %s", strings.Join(missing, ", ")))
+	}
+	if cfg.DefaultLocation != "" && cfg.DefaultLocation != "home" && cfg.DefaultLocation != "office" {
+		problems = append(problems, fmt.Sprintf("invalid DEFAULT_LOCATION %q: must be 'home' or 'office'", cfg.DefaultLocation))
+	}
+	if len(problems) > 0 {
+		return nil, errors.New(strings.Join(problems, "; "))
 	}
 
 	return cfg, nil

@@ -149,15 +149,38 @@ Write-Host '  Sign up at https://www.pugetsound.onebusaway.org/p/sign-up' -Foreg
 $obaApiKey = Read-Host '  API key'
 if ([string]::IsNullOrWhiteSpace($obaApiKey)) { Fail 'API key is required.' }
 
-# Home wifi
+# Default location
 Write-Host ''
-Write-Host '  Home WiFi network name (used for auto-detecting direction)' -ForegroundColor White
+Write-Host '  Default location for ethernet/no-WiFi use' -ForegroundColor White
+$configureDefaultLocation = Read-Host '  Set a default location? [y/N]'
+if ([string]::IsNullOrWhiteSpace($configureDefaultLocation)) { $configureDefaultLocation = 'N' }
+
+$defaultLocation = ''
+if ($configureDefaultLocation -match '^[Yy]') {
+    while ($true) {
+        $defaultLocation = (Read-Host '  Default location [home/office]').Trim().ToLowerInvariant()
+        if ($defaultLocation -in @('home', 'office')) {
+            break
+        }
+        Warn "Please enter 'home' or 'office'."
+    }
+}
+
+# WiFi names
+Write-Host ''
+if ([string]::IsNullOrWhiteSpace($defaultLocation)) {
+    Write-Host '  WiFi network names (required unless you set a default location)' -ForegroundColor White
+} else {
+    Write-Host '  WiFi network names (optional when a default location is set)' -ForegroundColor White
+    Write-Host '  Leave blank to skip WiFi auto-detection on this device.'
+}
 $homeWifi = Read-Host '  Home WiFi SSID'
 
-# Office wifi
-Write-Host ''
-Write-Host '  Office WiFi network name' -ForegroundColor White
 $officeWifi = Read-Host '  Office WiFi SSID'
+
+if ([string]::IsNullOrWhiteSpace($defaultLocation) -and ([string]::IsNullOrWhiteSpace($homeWifi) -or [string]::IsNullOrWhiteSpace($officeWifi))) {
+    Fail 'HOME_WIFI and OFFICE_WIFI are required unless you set a default location.'
+}
 
 # Stop IDs
 Write-Host ''
@@ -170,7 +193,18 @@ if (-not (Test-Path $ConfigDir)) {
     New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
 }
 
-$envContent = "OBA_API_KEY=$obaApiKey`nHOME_WIFI=$homeWifi`nOFFICE_WIFI=$officeWifi`nHOME_STOP_ID=$homeStopId`nOFFICE_STOP_ID=$officeStopId"
+$envLines = @(
+    "OBA_API_KEY=$obaApiKey",
+    "HOME_WIFI=$homeWifi",
+    "OFFICE_WIFI=$officeWifi",
+    "HOME_STOP_ID=$homeStopId",
+    "OFFICE_STOP_ID=$officeStopId"
+)
+if (-not [string]::IsNullOrWhiteSpace($defaultLocation)) {
+    $envLines += "DEFAULT_LOCATION=$defaultLocation"
+}
+
+$envContent = [string]::Join("`n", $envLines)
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($envFile, $envContent, $utf8NoBom)
 

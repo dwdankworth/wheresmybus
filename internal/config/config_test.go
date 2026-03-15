@@ -10,6 +10,15 @@ import (
 
 var requiredEnvVars = []string{
 	"OBA_API_KEY",
+	"HOME_STOP_ID",
+	"OFFICE_STOP_ID",
+	"HOME_WIFI",
+	"OFFICE_WIFI",
+	"DEFAULT_LOCATION",
+}
+
+var requiredWithoutDefaultLocation = []string{
+	"OBA_API_KEY",
 	"HOME_WIFI",
 	"OFFICE_WIFI",
 	"HOME_STOP_ID",
@@ -64,11 +73,12 @@ func setIsolatedConfigDirEnv(t *testing.T) {
 
 func TestLoadFromEnv_AllPresent(t *testing.T) {
 	want := &Config{
-		APIKey:       "api-key",
-		HomeWifi:     "home-wifi",
-		OfficeWifi:   "office-wifi",
-		HomeStopID:   "home-stop",
-		OfficeStopID: "office-stop",
+		APIKey:          "api-key",
+		HomeWifi:        "home-wifi",
+		OfficeWifi:      "office-wifi",
+		HomeStopID:      "home-stop",
+		OfficeStopID:    "office-stop",
+		DefaultLocation: "",
 	}
 
 	t.Setenv("OBA_API_KEY", want.APIKey)
@@ -76,6 +86,31 @@ func TestLoadFromEnv_AllPresent(t *testing.T) {
 	t.Setenv("OFFICE_WIFI", want.OfficeWifi)
 	t.Setenv("HOME_STOP_ID", want.HomeStopID)
 	t.Setenv("OFFICE_STOP_ID", want.OfficeStopID)
+
+	got, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("LoadFromEnv() error = %v", err)
+	}
+
+	if *got != *want {
+		t.Fatalf("LoadFromEnv() = %+v, want %+v", *got, *want)
+	}
+}
+
+func TestLoadFromEnv_DefaultLocationMakesWifiOptional(t *testing.T) {
+	want := &Config{
+		APIKey:          "api-key",
+		HomeStopID:      "home-stop",
+		OfficeStopID:    "office-stop",
+		DefaultLocation: "home",
+	}
+
+	t.Setenv("OBA_API_KEY", want.APIKey)
+	t.Setenv("HOME_STOP_ID", want.HomeStopID)
+	t.Setenv("OFFICE_STOP_ID", want.OfficeStopID)
+	t.Setenv("DEFAULT_LOCATION", want.DefaultLocation)
+	t.Setenv("HOME_WIFI", "")
+	t.Setenv("OFFICE_WIFI", "")
 
 	got, err := LoadFromEnv()
 	if err != nil {
@@ -96,7 +131,7 @@ func TestLoadFromEnv_MissingCases(t *testing.T) {
 	}{
 		{
 			name:         "MissingAll",
-			wantContains: requiredEnvVars,
+			wantContains: requiredWithoutDefaultLocation,
 		},
 		{
 			name: "MissingSome",
@@ -116,7 +151,16 @@ func TestLoadFromEnv_MissingCases(t *testing.T) {
 				"HOME_STOP_ID":   "",
 				"OFFICE_STOP_ID": "",
 			},
-			wantContains: requiredEnvVars,
+			wantContains: requiredWithoutDefaultLocation,
+		},
+		{
+			name: "MissingWiFiWithoutDefaultLocation",
+			env: map[string]string{
+				"OBA_API_KEY":    "api-key",
+				"HOME_STOP_ID":   "home-stop",
+				"OFFICE_STOP_ID": "office-stop",
+			},
+			wantContains: []string{"HOME_WIFI", "OFFICE_WIFI"},
 		},
 	}
 
@@ -146,6 +190,26 @@ func TestLoadFromEnv_MissingCases(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestLoadFromEnv_InvalidDefaultLocation(t *testing.T) {
+	t.Setenv("OBA_API_KEY", "api-key")
+	t.Setenv("HOME_STOP_ID", "home-stop")
+	t.Setenv("OFFICE_STOP_ID", "office-stop")
+	t.Setenv("DEFAULT_LOCATION", "dock")
+
+	_, err := LoadFromEnv()
+	if err == nil {
+		t.Fatal("LoadFromEnv() error = nil, want non-nil")
+	}
+
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, `invalid DEFAULT_LOCATION "dock"`) {
+		t.Fatalf("error = %q, want invalid DEFAULT_LOCATION message", errMsg)
+	}
+	if strings.Contains(errMsg, "HOME_WIFI") || strings.Contains(errMsg, "OFFICE_WIFI") {
+		t.Fatalf("error = %q, should not require wifi vars when DEFAULT_LOCATION is set", errMsg)
 	}
 }
 

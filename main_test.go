@@ -10,11 +10,12 @@ import (
 
 func testConfig() *config.Config {
 	return &config.Config{
-		APIKey:       "test-key",
-		HomeWifi:     "HomeNet",
-		OfficeWifi:   "OfficeNet",
-		HomeStopID:   "1_HOME",
-		OfficeStopID: "1_OFFICE",
+		APIKey:          "test-key",
+		HomeWifi:        "HomeNet",
+		OfficeWifi:      "OfficeNet",
+		HomeStopID:      "1_HOME",
+		OfficeStopID:    "1_OFFICE",
+		DefaultLocation: "",
 	}
 }
 
@@ -22,6 +23,7 @@ func TestResolveStop(t *testing.T) {
 	tests := []struct {
 		name             string
 		direction        string
+		defaultLocation  string
 		detectSSID       func() (string, error)
 		wantStop         string
 		wantErr          string
@@ -73,6 +75,46 @@ func TestResolveStop(t *testing.T) {
 			wantDetectCalled: true,
 		},
 		{
+			name:            "default location used when wifi is unavailable",
+			direction:       "",
+			defaultLocation: "home",
+			detectSSID: func() (string, error) {
+				return "", nil
+			},
+			wantStop:         "1_HOME",
+			wantDetectCalled: true,
+		},
+		{
+			name:            "default location used when wifi detection errors",
+			direction:       "",
+			defaultLocation: "office",
+			detectSSID: func() (string, error) {
+				return "", errors.New("boom")
+			},
+			wantStop:         "1_OFFICE",
+			wantDetectCalled: true,
+		},
+		{
+			name:            "wifi match wins over default location",
+			direction:       "",
+			defaultLocation: "office",
+			detectSSID: func() (string, error) {
+				return "HomeNet", nil
+			},
+			wantStop:         "1_HOME",
+			wantDetectCalled: true,
+		},
+		{
+			name:            "explicit direction wins over default location",
+			direction:       "home",
+			defaultLocation: "office",
+			detectSSID: func() (string, error) {
+				return "HomeNet", nil
+			},
+			wantStop:         "1_OFFICE",
+			wantDetectCalled: false,
+		},
+		{
 			name:      "no wifi connection",
 			direction: "",
 			detectSSID: func() (string, error) {
@@ -100,7 +142,10 @@ func TestResolveStop(t *testing.T) {
 				return tt.detectSSID()
 			}
 
-			got, err := resolveStop(testConfig(), tt.direction, detectSSID)
+			cfg := testConfig()
+			cfg.DefaultLocation = tt.defaultLocation
+
+			got, err := resolveStop(cfg, tt.direction, detectSSID)
 
 			if called != tt.wantDetectCalled {
 				t.Fatalf("detectSSID called = %v, want %v", called, tt.wantDetectCalled)
