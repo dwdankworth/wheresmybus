@@ -41,6 +41,15 @@ OFFICE_STOP_ID=file-office-stop
 	}
 }
 
+func setIsolatedConfigDirEnv(t *testing.T) {
+	t.Helper()
+
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(fakeHome, ".config"))
+	t.Setenv("APPDATA", filepath.Join(fakeHome, "AppData", "Roaming"))
+}
+
 func TestLoadFromEnv_AllPresent(t *testing.T) {
 	want := &Config{
 		APIKey:       "api-key",
@@ -168,10 +177,8 @@ func TestLoad_ConfigDirFallback(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
-	// Override HOME/APPDATA so os.UserConfigDir() resolves to a temp location
-	fakeHome := t.TempDir()
-	t.Setenv("HOME", fakeHome)
-	t.Setenv("APPDATA", filepath.Join(fakeHome, "AppData", "Roaming"))
+	// Override config-dir env vars so os.UserConfigDir() resolves to a temp location.
+	setIsolatedConfigDirEnv(t)
 
 	cfgDir := ConfigDir()
 	if cfgDir == "" {
@@ -209,9 +216,7 @@ OFFICE_STOP_ID=cwd-office-stop
 	}
 
 	// Config dir .env with different values
-	fakeHome := t.TempDir()
-	t.Setenv("HOME", fakeHome)
-	t.Setenv("APPDATA", filepath.Join(fakeHome, "AppData", "Roaming"))
+	setIsolatedConfigDirEnv(t)
 
 	cfgDir := ConfigDir()
 	if cfgDir == "" {
@@ -276,11 +281,9 @@ func TestLoad_NoEnvFile(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
-	// Override HOME/APPDATA so ConfigDir() resolves to a controlled
+	// Override config-dir env vars so ConfigDir() resolves to a controlled
 	// empty location, matching the isolation used by other Load tests.
-	fakeHome := t.TempDir()
-	t.Setenv("HOME", fakeHome)
-	t.Setenv("APPDATA", filepath.Join(fakeHome, "AppData", "Roaming"))
+	setIsolatedConfigDirEnv(t)
 
 	_, err = Load()
 	if err == nil {
