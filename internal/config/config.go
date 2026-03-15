@@ -37,21 +37,9 @@ func ConfigDir() string {
 // If no .env file is found, it falls back to reading from environment
 // variables directly.
 func Load() (*Config, error) {
-	loaded := false
-
-	// Try CWD first
-	if err := godotenv.Load(); err == nil {
-		loaded = true
-	}
-
-	// Try user config dir
-	if !loaded {
-		if cfgDir := ConfigDir(); cfgDir != "" {
-			cfgPath := filepath.Join(cfgDir, ".env")
-			if err := godotenv.Load(cfgPath); err == nil {
-				loaded = true
-			}
-		}
+	loaded, err := loadFirstEnvFile()
+	if err != nil {
+		return nil, err
 	}
 
 	cfg, err := LoadFromEnv()
@@ -63,6 +51,44 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+func loadFirstEnvFile() (bool, error) {
+	if loaded, err := loadEnvFile(".env"); loaded || err != nil {
+		return loaded, err
+	}
+
+	if cfgDir := ConfigDir(); cfgDir != "" {
+		return loadEnvFile(filepath.Join(cfgDir, ".env"))
+	}
+
+	return false, nil
+}
+
+func loadEnvFile(path string) (bool, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("read %s: %w", path, err)
+	}
+
+	envVars, err := godotenv.Unmarshal(strings.TrimPrefix(string(content), "\ufeff"))
+	if err != nil {
+		return false, fmt.Errorf("parse %s: %w", path, err)
+	}
+
+	for key, value := range envVars {
+		if _, exists := os.LookupEnv(key); exists {
+			continue
+		}
+		if err := os.Setenv(key, value); err != nil {
+			return false, fmt.Errorf("set %s from %s: %w", key, path, err)
+		}
+	}
+
+	return true, nil
 }
 
 func configFilePath() string {

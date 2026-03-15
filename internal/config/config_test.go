@@ -19,7 +19,7 @@ var requiredEnvVars = []string{
 func clearEnvVars(t *testing.T) {
 	t.Helper()
 	for _, key := range requiredEnvVars {
-		t.Setenv(key, "")  // save original for cleanup
+		t.Setenv(key, "") // save original for cleanup
 		if err := os.Unsetenv(key); err != nil {
 			t.Fatalf("Unsetenv(%q): %v", key, err)
 		}
@@ -34,10 +34,21 @@ OFFICE_WIFI=file-office
 HOME_STOP_ID=file-home-stop
 OFFICE_STOP_ID=file-office-stop
 `
+	writeEnvFileContent(t, dir, []byte(content))
+}
+
+func writeEnvFileWithBOM(t *testing.T, dir string) {
+	t.Helper()
+	content := []byte("\ufeffOBA_API_KEY=file-key\nHOME_WIFI=file-home\nOFFICE_WIFI=file-office\nHOME_STOP_ID=file-home-stop\nOFFICE_STOP_ID=file-office-stop\n")
+	writeEnvFileContent(t, dir, content)
+}
+
+func writeEnvFileContent(t *testing.T, dir string, content []byte) {
+	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q): %v", dir, err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".env"), content, 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 }
@@ -196,6 +207,37 @@ func TestLoad_ConfigDirFallback(t *testing.T) {
 	}
 }
 
+func TestLoad_ConfigDirFallbackWithUTF8BOM(t *testing.T) {
+	clearEnvVars(t)
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd(): %v", err)
+	}
+
+	emptyDir := t.TempDir()
+	if err := os.Chdir(emptyDir); err != nil {
+		t.Fatalf("Chdir(%q): %v", emptyDir, err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	setIsolatedConfigDirEnv(t)
+
+	cfgDir := ConfigDir()
+	if cfgDir == "" {
+		t.Fatal("ConfigDir() returned empty string")
+	}
+	writeEnvFileWithBOM(t, cfgDir)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.APIKey != "file-key" {
+		t.Fatalf("APIKey = %q, want %q", cfg.APIKey, "file-key")
+	}
+}
+
 func TestLoad_CWDTakesPriority(t *testing.T) {
 	clearEnvVars(t)
 
@@ -297,6 +339,42 @@ func TestLoad_NoEnvFile(t *testing.T) {
 	}
 	if !strings.Contains(errMsg, "no .env found") {
 		t.Fatalf("error = %q, want to contain %q", errMsg, "no .env found")
+	}
+}
+
+func TestLoad_InvalidConfigDirEnvFile(t *testing.T) {
+	clearEnvVars(t)
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd(): %v", err)
+	}
+
+	emptyDir := t.TempDir()
+	if err := os.Chdir(emptyDir); err != nil {
+		t.Fatalf("Chdir(%q): %v", emptyDir, err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	setIsolatedConfigDirEnv(t)
+
+	cfgDir := ConfigDir()
+	if cfgDir == "" {
+		t.Fatal("ConfigDir() returned empty string")
+	}
+	writeEnvFileContent(t, cfgDir, []byte("OBA_API_KEY=\"unterminated\n"))
+
+	_, err = Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want non-nil")
+	}
+
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "parse ") {
+		t.Fatalf("error = %q, want to contain %q", errMsg, "parse ")
+	}
+	if strings.Contains(errMsg, "no .env found") {
+		t.Fatalf("error = %q, should not misreport missing file", errMsg)
 	}
 }
 
