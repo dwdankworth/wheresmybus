@@ -64,7 +64,11 @@ func main() {
 }
 
 func versionString() string {
-	return fmt.Sprintf("wheresmybus version %s", version)
+	v := version
+	if v == "" {
+		v = "dev"
+	}
+	return fmt.Sprintf("wheresmybus version %s", v)
 }
 
 func validateFlags(stop, direction string) error {
