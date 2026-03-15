@@ -217,6 +217,167 @@ func TestGetArrivals_URLConstruction(t *testing.T) {
 	}
 }
 
+func TestGetArrivalsForStop_UsesExactStopIDWithoutResolution(t *testing.T) {
+	var agenciesCalled bool
+	var stopLookupCalled bool
+	var arrivalsPath string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/where/agencies-with-coverage.json":
+			agenciesCalled = true
+			t.Fatalf("did not expect agencies-with-coverage lookup for exact stop ID")
+		case "/api/where/stop/1_75403.json":
+			stopLookupCalled = true
+			t.Fatalf("did not expect stop lookup for exact stop ID")
+		case "/api/where/arrivals-and-departures-for-stop/1_75403.json":
+			arrivalsPath = r.URL.Path
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"arrivalsAndDepartures":[]}}}`)
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	arrivals, resolvedStopID, err := getArrivals(server.Client(), server.URL, "test-api-key", "1_75403")
+	if err != nil {
+		t.Fatalf("getArrivals returned error: %v", err)
+	}
+	if len(arrivals) != 0 {
+		t.Fatalf("expected no arrivals, got %d", len(arrivals))
+	}
+	if resolvedStopID != "1_75403" {
+		t.Fatalf("resolved stop ID = %q, want %q", resolvedStopID, "1_75403")
+	}
+	if agenciesCalled {
+		t.Fatal("agencies-with-coverage endpoint was called unexpectedly")
+	}
+	if stopLookupCalled {
+		t.Fatal("stop lookup endpoint was called unexpectedly")
+	}
+	if arrivalsPath != "/api/where/arrivals-and-departures-for-stop/1_75403.json" {
+		t.Fatalf("arrivals path = %q, want exact stop path", arrivalsPath)
+	}
+}
+
+func TestGetArrivalsForStop_ResolvesBareStopCode(t *testing.T) {
+	var probedStops []string
+	var arrivalsPath string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/where/agencies-with-coverage.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"list":[{"agencyId":"40"},{"agencyId":"1"},{"agencyId":"29"}]}}`)
+		case "/api/where/stop/1_71335.json":
+			probedStops = append(probedStops, "1_71335")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"id":"1_71335"}}}`)
+		case "/api/where/stop/29_71335.json":
+			probedStops = append(probedStops, "29_71335")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `null`)
+		case "/api/where/stop/40_71335.json":
+			probedStops = append(probedStops, "40_71335")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `null`)
+		case "/api/where/arrivals-and-departures-for-stop/1_71335.json":
+			arrivalsPath = r.URL.Path
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"arrivalsAndDepartures":[{"routeShortName":"542","tripHeadsign":"U-District Station","predictedArrivalTime":1700000000000,"scheduledArrivalTime":1700000060000,"numberOfStopsAway":4,"predicted":true,"routeId":"40_100511","stopId":"1_71335","tripId":"40_trip"}]}}}`)
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	arrivals, resolvedStopID, err := getArrivals(server.Client(), server.URL, "test-api-key", "71335")
+	if err != nil {
+		t.Fatalf("getArrivals returned error: %v", err)
+	}
+	if resolvedStopID != "1_71335" {
+		t.Fatalf("resolved stop ID = %q, want %q", resolvedStopID, "1_71335")
+	}
+	if len(arrivals) != 1 {
+		t.Fatalf("expected 1 arrival, got %d", len(arrivals))
+	}
+	wantProbed := []string{"1_71335", "29_71335", "40_71335"}
+	if strings.Join(probedStops, ",") != strings.Join(wantProbed, ",") {
+		t.Fatalf("probed stops = %v, want %v", probedStops, wantProbed)
+	}
+	if arrivalsPath != "/api/where/arrivals-and-departures-for-stop/1_71335.json" {
+		t.Fatalf("arrivals path = %q, want resolved stop path", arrivalsPath)
+	}
+}
+
+func TestGetArrivalsForStop_BareStopCodeNotFound(t *testing.T) {
+	var arrivalsCalled bool
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/where/agencies-with-coverage.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"list":[{"agencyId":"1"},{"agencyId":"40"}]}}`)
+		case "/api/where/stop/1_71335.json", "/api/where/stop/40_71335.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `null`)
+		case "/api/where/arrivals-and-departures-for-stop/1_71335.json", "/api/where/arrivals-and-departures-for-stop/40_71335.json":
+			arrivalsCalled = true
+			t.Fatalf("did not expect arrivals lookup when no stop matched")
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	_, _, err := getArrivals(server.Client(), server.URL, "test-api-key", "71335")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "stop code 71335 was not found in Puget Sound OneBusAway") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if arrivalsCalled {
+		t.Fatal("arrivals lookup was called unexpectedly")
+	}
+}
+
+func TestGetArrivalsForStop_BareStopCodeAmbiguous(t *testing.T) {
+	var arrivalsCalled bool
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/where/agencies-with-coverage.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"list":[{"agencyId":"40"},{"agencyId":"1"}]}}`)
+		case "/api/where/stop/1_71335.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"id":"1_71335"}}}`)
+		case "/api/where/stop/40_71335.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"id":"40_71335"}}}`)
+		case "/api/where/arrivals-and-departures-for-stop/1_71335.json", "/api/where/arrivals-and-departures-for-stop/40_71335.json":
+			arrivalsCalled = true
+			t.Fatalf("did not expect arrivals lookup when stop code was ambiguous")
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	_, _, err := getArrivals(server.Client(), server.URL, "test-api-key", "71335")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "stop code 71335 matched multiple Puget Sound stop IDs: 1_71335, 40_71335") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if arrivalsCalled {
+		t.Fatal("arrivals lookup was called unexpectedly")
+	}
+}
+
 func TestGetArrivalsFromURL_ReadBodyError(t *testing.T) {
 	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		return &http.Response{

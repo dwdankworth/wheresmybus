@@ -185,9 +185,10 @@ if ([string]::IsNullOrWhiteSpace($defaultLocation) -and ([string]::IsNullOrWhite
 # Stop IDs
 Write-Host ''
 Write-Host '  Bus stop IDs' -ForegroundColor White
-Write-Host '  Find yours at https://pugetsound.onebusaway.org (e.g. 1_75403)' -ForegroundColor Blue
-$homeStopId = Read-Host '  Home stop ID'
-$officeStopId = Read-Host '  Office stop ID'
+Write-Host '  Find yours at https://pugetsound.onebusaway.org or Google Maps.' -ForegroundColor Blue
+Write-Host '  Enter either a bare stop code like 71335 or a full OBA stop ID like 1_71335.'
+$homeStopId = Read-Host '  Home stop code or ID'
+$officeStopId = Read-Host '  Office stop code or ID'
 
 if (-not (Test-Path $ConfigDir)) {
     New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null

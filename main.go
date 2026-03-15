@@ -39,19 +39,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	stopID, err := resolveStop(cfg, *direction, wifi.CurrentSSID)
+	stopRef, err := resolveStop(cfg, *direction, wifi.CurrentSSID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
-	arrivals, err := api.GetArrivals(cfg.APIKey, stopID)
+	arrivals, resolvedStopID, err := api.GetArrivalsForStop(cfg.APIKey, stopRef)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error fetching arrivals: %v\n", err)
 		os.Exit(1)
 	}
 
-	display.PrintArrivals(arrivals, stopID, maxResults)
+	display.PrintArrivals(arrivals, resolvedStopID, maxResults)
 }
 
 func resolveStop(cfg *config.Config, direction string, detectSSID func() (string, error)) (string, error) {
