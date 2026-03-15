@@ -25,7 +25,7 @@ func PrintArrivals(arrivals []api.Arrival, stopID string, maxResults int) {
 		sorted = sorted[:maxResults]
 	}
 
-	fmt.Printf("🚌 Arrivals for stop %s:\n", stopID)
+	fmt.Printf("Arrivals for stop %s:\n", stopID)
 	fmt.Printf("\n")
 
 	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -71,10 +71,10 @@ func formatETA(arrival api.Arrival) string {
 
 func formatStatus(arrival api.Arrival) string {
 	if arrival.Predicted {
-		return fmt.Sprintf("📍 %d stops away", arrival.NumberOfStopsAway)
+		return fmt.Sprintf("%d stops away", arrival.NumberOfStopsAway)
 	}
 
-	return "📅 Scheduled"
+	return "Scheduled"
 }
 
 func truncate(value string, max int) string {

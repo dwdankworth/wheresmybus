@@ -71,12 +71,12 @@ wheresmybus --direction office
 ### Example output
 
 ```
-🚌 Arrivals for stop 1_75403:
+Arrivals for stop 1_75403:
 
 ROUTE     DESTINATION                     ETA                 STATUS
-372E      U-District Station              3 min               📍 1 stops away
-67        Northgate Station               5 min               📍 1 stops away
-67        Northgate Station               18 min              📍 16 stops away
-45        Loyal Heights Greenwood         21 min              📍 15 stops away
-372E      U-District Station              22 min              📍 15 stops away
+372E      U-District Station              3 min               1 stops away
+67        Northgate Station               5 min               1 stops away
+67        Northgate Station               18 min              16 stops away
+45        Loyal Heights Greenwood         21 min              15 stops away
+372E      U-District Station              22 min              15 stops away
 ```

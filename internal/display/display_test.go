@@ -21,7 +21,7 @@ func TestTruncate(t *testing.T) {
 		{name: "short string", value: "bus", max: 10, want: "bus"},
 		{name: "exact max length", value: "route", max: 5, want: "route"},
 		{name: "over max length", value: "downtown", max: 4, want: "down"},
-		{name: "unicode runes", value: "🚌🚏🙂", max: 2, want: "🚌🚏"},
+		{name: "unicode runes", value: "日本語", max: 2, want: "日本"},
 	}
 
 	for _, tt := range tests {
@@ -80,7 +80,7 @@ func TestFormatStatus(t *testing.T) {
 				Predicted:         true,
 				NumberOfStopsAway: 0,
 			},
-			want: "📍 0 stops away",
+			want: "0 stops away",
 		},
 		{
 			name: "predicted one stop away",
@@ -88,7 +88,7 @@ func TestFormatStatus(t *testing.T) {
 				Predicted:         true,
 				NumberOfStopsAway: 1,
 			},
-			want: "📍 1 stops away",
+			want: "1 stops away",
 		},
 		{
 			name: "predicted multiple stops away",
@@ -96,14 +96,14 @@ func TestFormatStatus(t *testing.T) {
 				Predicted:         true,
 				NumberOfStopsAway: 5,
 			},
-			want: "📍 5 stops away",
+			want: "5 stops away",
 		},
 		{
 			name: "scheduled arrival",
 			arrival: api.Arrival{
 				Predicted: false,
 			},
-			want: "📅 Scheduled",
+			want: "Scheduled",
 		},
 	}
 
