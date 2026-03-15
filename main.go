@@ -64,19 +64,30 @@ func resolveStop(cfg *config.Config, direction string, detectSSID func() (string
 
 	// Auto-detect from wifi
 	ssid, err := detectSSID()
+	if err == nil {
+		switch ssid {
+		case cfg.HomeWifi:
+			return cfg.HomeStopID, nil // At home → show nearby stop
+		case cfg.OfficeWifi:
+			return cfg.OfficeStopID, nil // At office → show nearby stop
+		}
+	}
+
+	if cfg.DefaultLocation != "" {
+		switch cfg.DefaultLocation {
+		case "home":
+			return cfg.HomeStopID, nil
+		case "office":
+			return cfg.OfficeStopID, nil
+		}
+	}
+
 	if err != nil {
 		return "", fmt.Errorf("wifi detection failed: %w\nUse --direction home|office instead", err)
 	}
 
-	switch ssid {
-	case cfg.HomeWifi:
-		return cfg.HomeStopID, nil // At home → show nearby stop
-	case cfg.OfficeWifi:
-		return cfg.OfficeStopID, nil // At office → show nearby stop
-	default:
-		if ssid == "" {
-			return "", fmt.Errorf("not connected to wifi\nUse: wheresmybus --direction home|office")
-		}
-		return "", fmt.Errorf("unknown wifi network %q\nUse: wheresmybus --direction home|office", ssid)
+	if ssid == "" {
+		return "", fmt.Errorf("not connected to wifi\nUse: wheresmybus --direction home|office")
 	}
+	return "", fmt.Errorf("unknown wifi network %q\nUse: wheresmybus --direction home|office", ssid)
 }

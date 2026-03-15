@@ -17,7 +17,7 @@ Uses the [OneBusAway](https://pugetsound.onebusaway.org/) API for King County Me
 .\setup.ps1
 ```
 
-The setup script will verify Go is installed, build the CLI, offer to add it to your PATH, and either reuse an existing repo-local `.env` or walk you through creating one in the config directory.
+The setup script will verify Go is installed, build the CLI, offer to add it to your PATH, and either reuse an existing repo-local `.env` or walk you through creating one in the config directory, including an optional default location for ethernet/no-Wi-Fi use.
 
 ## Configuration
 
@@ -33,6 +33,19 @@ The setup script will verify Go is installed, build the CLI, offer to add it to 
 The setup scripts write `.env` to the platform-specific config directory so the installed binary works from any directory. If you already have a legacy `.env` next to the setup script, setup reuses it by copying it into that config directory.
 You can print the exact directory for your machine with `wheresmybus --print-config-dir`.
 
+Required env vars in every setup:
+
+- `OBA_API_KEY`
+- `HOME_STOP_ID`
+- `OFFICE_STOP_ID`
+
+For stop selection, you can use either:
+
+- Wi-Fi auto-detection with `HOME_WIFI` and `OFFICE_WIFI`
+- `DEFAULT_LOCATION=home|office` as a fallback for ethernet/no-Wi-Fi devices
+
+If `DEFAULT_LOCATION` is set, the Wi-Fi names become optional.
+
 ## Manual Setup
 
 ### 1. Get an API key
@@ -45,7 +58,7 @@ Search for your home and office bus stops at <https://pugetsound.onebusaway.org/
 
 ### 3. Configure .env
 
-If you'd like to use the automated setup script, you can skip this step. It will interview you to automatically collect the required env variables and create the .env file in the correct location. Create the config directory, copy the example file there, and fill in your values:
+If you'd like to use the automated setup script, you can skip this step. It will interview you to collect the needed env variables and create the `.env` file in the correct location. Create the config directory, copy the example file there, and fill in your values:
 
 ```sh
 # Linux
@@ -63,7 +76,7 @@ New-Item -ItemType Directory -Force -Path "$env:AppData\wheresmybus" | Out-Null
 Copy-Item .env.example "$env:AppData\wheresmybus\.env"
 ```
 
-For local development, `.env` in the current working directory still works.
+For local development, `.env` in the current working directory still works. If you set `DEFAULT_LOCATION`, you can leave `HOME_WIFI` and `OFFICE_WIFI` blank for ethernet-only setups.
 
 Edit the copied `.env` file:
 
@@ -73,6 +86,8 @@ HOME_WIFI=MyHomeNetwork
 OFFICE_WIFI=MyOfficeNetwork
 HOME_STOP_ID=1_75403
 OFFICE_STOP_ID=1_12345
+# Optional fallback for ethernet/no-Wi-Fi use
+DEFAULT_LOCATION=home
 ```
 
 ### 4. Install
@@ -106,7 +121,7 @@ go build -o wheresmybus.exe .
 ## Usage
 
 ```sh
-# Auto-detect direction from wifi network
+# Use Wi-Fi auto-detection, then fall back to DEFAULT_LOCATION if set
 wheresmybus
 
 # Explicitly pick a direction
@@ -114,11 +129,15 @@ wheresmybus --direction home
 wheresmybus --direction office
 ```
 
-### How wifi detection works
+### How stop resolution works
 
-- Connected to your **home wifi** → shows arrivals at your **office stop** (you're heading to work)
-- Connected to your **office wifi** → shows arrivals at your **home stop** (you're heading home)
-- Not on either network → use `--direction` flag
+- `--direction home` shows arrivals for `OFFICE_STOP_ID`
+- `--direction office` shows arrivals for `HOME_STOP_ID`
+- Connected to `HOME_WIFI` → shows arrivals for `HOME_STOP_ID`
+- Connected to `OFFICE_WIFI` → shows arrivals for `OFFICE_STOP_ID`
+- If Wi-Fi does not resolve and `DEFAULT_LOCATION=home`, it uses `HOME_STOP_ID`
+- If Wi-Fi does not resolve and `DEFAULT_LOCATION=office`, it uses `OFFICE_STOP_ID`
+- If none of the above apply, use `--direction`
 
 | Platform | Method |
 |---|---|

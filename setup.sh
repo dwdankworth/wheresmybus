@@ -146,13 +146,37 @@ if [[ -z "$oba_api_key" ]]; then
   fail "API key is required."
 fi
 
-# Home wifi
-printf '\n  %bHome WiFi network name%b (used for auto-detecting direction)\n' "$BOLD" "$RESET"
+# Default location
+default_location=""
+printf '\n  %bDefault location for ethernet/no-WiFi use%b\n' "$BOLD" "$RESET"
+read -rp "  Set a default location? [y/N] " configure_default_location
+configure_default_location="${configure_default_location:-N}"
+
+if [[ "$configure_default_location" =~ ^[Yy] ]]; then
+  while true; do
+    read -rp "  Default location [home/office]: " default_location
+    default_location="${default_location,,}"
+    if [[ "$default_location" == "home" || "$default_location" == "office" ]]; then
+      break
+    fi
+    warn "Please enter 'home' or 'office'."
+  done
+fi
+
+# WiFi names
+if [[ -n "$default_location" ]]; then
+  printf '\n  %bWiFi network names%b (optional when a default location is set)\n' "$BOLD" "$RESET"
+  printf '  Leave blank to skip WiFi auto-detection on this device.\n'
+else
+  printf '\n  %bWiFi network names%b (required unless you set a default location)\n' "$BOLD" "$RESET"
+fi
 read -rp "  Home WiFi SSID: " home_wifi
 
-# Office wifi
-printf '\n  %bOffice WiFi network name%b\n' "$BOLD" "$RESET"
 read -rp "  Office WiFi SSID: " office_wifi
+
+if [[ -z "$default_location" ]] && { [[ -z "$home_wifi" ]] || [[ -z "$office_wifi" ]]; }; then
+  fail "HOME_WIFI and OFFICE_WIFI are required unless you set a default location."
+fi
 
 # Stop IDs
 printf '\n  %bBus stop IDs%b\n' "$BOLD" "$RESET"
@@ -168,6 +192,10 @@ OFFICE_WIFI=${office_wifi}
 HOME_STOP_ID=${home_stop_id}
 OFFICE_STOP_ID=${office_stop_id}
 EOF
+
+if [[ -n "$default_location" ]]; then
+  printf 'DEFAULT_LOCATION=%s\n' "$default_location" >> "$ENV_FILE"
+fi
 
 ok "Wrote ${ENV_FILE}"
 
