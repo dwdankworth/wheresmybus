@@ -3,10 +3,13 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/joho/godotenv"
 )
+
+const appName = "wheresmybus"
 
 // Config contains runtime settings loaded from environment variables.
 type Config struct {
@@ -17,13 +20,56 @@ type Config struct {
 	OfficeStopID string
 }
 
-// Load reads configuration from a .env file in the current directory.
+// ConfigDir returns the platform-specific config directory for wheresmybus.
+// Returns an empty string if the directory cannot be determined.
+func ConfigDir() string {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, appName)
+}
+
+// Load reads configuration from a .env file, searching in priority order:
+//  1. .env in the current working directory
+//  2. .env in the user config directory (e.g. ~/.config/wheresmybus/)
+//
+// If no .env file is found, it falls back to reading from environment
+// variables directly.
 func Load() (*Config, error) {
-	if err := godotenv.Load(); err != nil {
-		return nil, fmt.Errorf("load .env: %w", err)
+	loaded := false
+
+	// Try CWD first
+	if err := godotenv.Load(); err == nil {
+		loaded = true
 	}
 
-	return LoadFromEnv()
+	// Try user config dir
+	if !loaded {
+		if cfgDir := ConfigDir(); cfgDir != "" {
+			cfgPath := filepath.Join(cfgDir, ".env")
+			if err := godotenv.Load(cfgPath); err == nil {
+				loaded = true
+			}
+		}
+	}
+
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		if !loaded {
+			return nil, fmt.Errorf("%w (no .env found in current directory or %s)",
+				err, configFilePath())
+		}
+		return nil, err
+	}
+	return cfg, nil
+}
+
+func configFilePath() string {
+	if dir := ConfigDir(); dir != "" {
+		return filepath.Join(dir, ".env")
+	}
+	return "<config dir>/.env (could not determine config directory)"
 }
 
 // LoadFromEnv reads configuration from environment variables.

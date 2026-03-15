@@ -15,7 +15,18 @@ const maxResults = 5
 
 func main() {
 	direction := flag.String("direction", "", "Which stop to query: 'home' or 'office'")
+	printConfigDir := flag.Bool("print-config-dir", false, "Print the platform-specific config directory and exit")
 	flag.Parse()
+
+	if *printConfigDir {
+		dir := config.ConfigDir()
+		if dir == "" {
+			fmt.Fprintln(os.Stderr, "Error: could not determine config directory")
+			os.Exit(1)
+		}
+		fmt.Println(dir)
+		return
+	}
 
 	if *direction != "" && *direction != "home" && *direction != "office" {
 		fmt.Fprintf(os.Stderr, "Error: --direction must be 'home' or 'office'\n")
@@ -24,7 +35,7 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n\nCopy .env.example to .env and fill in your values.\n", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n\nRun the setup script or copy .env.example to the config directory.\nSee: wheresmybus --help or the README for details.\n", err)
 		os.Exit(1)
 	}
 

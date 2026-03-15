@@ -107,12 +107,18 @@ fi
 # ---------- 5. Configure .env ----------
 printf '\n%bConfigure .env%b\n' "$BOLD" "$RESET"
 
-if [[ -f "$SCRIPT_DIR/.env" ]]; then
+if ! CONFIG_DIR="$(./wheresmybus --print-config-dir)"; then
+  fail "Could not determine the config directory."
+fi
+ENV_FILE="$CONFIG_DIR/.env"
+
+if [[ -f "$ENV_FILE" ]]; then
   read -rp "  .env already exists. Reconfigure? [y/N] " reconfig
   reconfig="${reconfig:-N}"
   if [[ ! "$reconfig" =~ ^[Yy] ]]; then
     ok "Keeping existing .env"
     printf '\n%b%bSetup complete!%b\n' "$GREEN" "$BOLD" "$RESET"
+    printf 'Configuration is stored in %b%s%b.\n' "$BOLD" "$ENV_FILE" "$RESET"
     printf 'Run %bwheresmybus%b to see your next bus.\n' "$BOLD" "$RESET"
     exit 0
   fi
@@ -143,7 +149,8 @@ printf '  Find yours at %bhttps://pugetsound.onebusaway.org%b (e.g. %b1_75403%b)
 read -rp "  Home stop ID: " home_stop_id
 read -rp "  Office stop ID: " office_stop_id
 
-cat > "$SCRIPT_DIR/.env" <<EOF
+mkdir -p "$CONFIG_DIR"
+cat > "$ENV_FILE" <<EOF
 OBA_API_KEY=${oba_api_key}
 HOME_WIFI=${home_wifi}
 OFFICE_WIFI=${office_wifi}
@@ -151,8 +158,9 @@ HOME_STOP_ID=${home_stop_id}
 OFFICE_STOP_ID=${office_stop_id}
 EOF
 
-ok "Wrote .env"
+ok "Wrote ${ENV_FILE}"
 
 # ---------- Done ----------
 printf '\n%b%bSetup complete!%b\n' "$GREEN" "$BOLD" "$RESET"
+printf 'Configuration is stored in %b%s%b.\n' "$BOLD" "$ENV_FILE" "$RESET"
 printf 'Run %bwheresmybus%b to see your next bus.\n' "$BOLD" "$RESET"
