@@ -28,7 +28,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	stopID, err := resolveStop(cfg, *direction)
+	stopID, err := resolveStop(cfg, *direction, wifi.CurrentSSID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -43,7 +43,7 @@ func main() {
 	display.PrintArrivals(arrivals, stopID, maxResults)
 }
 
-func resolveStop(cfg *config.Config, direction string) (string, error) {
+func resolveStop(cfg *config.Config, direction string, detectSSID func() (string, error)) (string, error) {
 	if direction == "home" {
 		return cfg.HomeStopID, nil
 	}
@@ -52,7 +52,7 @@ func resolveStop(cfg *config.Config, direction string) (string, error) {
 	}
 
 	// Auto-detect from wifi
-	ssid, err := wifi.CurrentSSID()
+	ssid, err := detectSSID()
 	if err != nil {
 		return "", fmt.Errorf("wifi detection failed: %w\nUse --direction home|office instead", err)
 	}

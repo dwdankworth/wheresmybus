@@ -7,6 +7,18 @@ import (
 	"strings"
 )
 
+type commandRunner interface {
+	Output(name string, args ...string) ([]byte, error)
+}
+
+type execRunner struct{}
+
+func (execRunner) Output(name string, args ...string) ([]byte, error) {
+	return exec.Command(name, args...).Output()
+}
+
+var runner commandRunner = execRunner{}
+
 // CurrentSSID returns the currently connected WiFi SSID, or an empty string when not connected.
 func CurrentSSID() (string, error) {
 	switch runtime.GOOS {
@@ -20,7 +32,7 @@ func CurrentSSID() (string, error) {
 }
 
 func currentSSIDLinux() (string, error) {
-	output, err := exec.Command("nmcli", "-t", "-f", "active,ssid", "dev", "wifi").Output()
+	output, err := runner.Output("nmcli", "-t", "-f", "active,ssid", "dev", "wifi")
 	if err != nil {
 		return "", nil
 	}
@@ -45,7 +57,7 @@ func currentSSIDLinux() (string, error) {
 }
 
 func currentSSIDDarwin() (string, error) {
-	output, err := exec.Command("/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport", "-I").Output()
+	output, err := runner.Output("/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport", "-I")
 	if err != nil {
 		return "", nil
 	}

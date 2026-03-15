@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 const baseURL = "https://api.pugetsound.onebusaway.org"
@@ -31,9 +32,17 @@ type obaResponse struct {
 }
 
 func GetArrivals(apiKey, stopID string) ([]Arrival, error) {
-	url := fmt.Sprintf("%s/api/where/arrivals-and-departures-for-stop/%s.json?key=%s", baseURL, stopID, apiKey)
+	requestURL := fmt.Sprintf("%s/api/where/arrivals-and-departures-for-stop/%s.json?%s", baseURL, url.PathEscape(stopID), url.Values{"key": []string{apiKey}}.Encode())
 
-	resp, err := http.Get(url)
+	return GetArrivalsFromURL(http.DefaultClient, requestURL)
+}
+
+func GetArrivalsFromURL(client *http.Client, requestURL string) ([]Arrival, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+
+	resp, err := client.Get(requestURL)
 	if err != nil {
 		return nil, fmt.Errorf("get arrivals: %w", err)
 	}
