@@ -170,7 +170,8 @@ func TestParsePowerShellSSID_CommandFails(t *testing.T) {
 	}
 }
 
-// --- WSL integration tests (PowerShell → netsh fallback) ---
+// --- Windows integration tests (PowerShell → netsh fallback) ---
+// These cover both native Windows and WSL, since both use currentSSIDWindows.
 
 type sequenceRunner struct {
 	calls   int
@@ -186,21 +187,21 @@ func (s *sequenceRunner) Output(name string, args ...string) ([]byte, error) {
 	return nil, errors.New("no more mock outputs")
 }
 
-func TestWSL_PowerShellSucceeds(t *testing.T) {
+func TestWindows_PowerShellSucceeds(t *testing.T) {
 	orig := runner
 	t.Cleanup(func() { runner = orig })
 	runner = mockRunner{output: []byte("MyHomeNetwork\r\n")}
 
-	ssid, err := currentSSIDWSL()
+	ssid, err := currentSSIDWindows()
 	if err != nil {
-		t.Fatalf("currentSSIDWSL() error = %v", err)
+		t.Fatalf("currentSSIDWindows() error = %v", err)
 	}
 	if ssid != "MyHomeNetwork" {
-		t.Fatalf("currentSSIDWSL() = %q, want %q", ssid, "MyHomeNetwork")
+		t.Fatalf("currentSSIDWindows() = %q, want %q", ssid, "MyHomeNetwork")
 	}
 }
 
-func TestWSL_PowerShellFails_FallsBackToNetsh(t *testing.T) {
+func TestWindows_PowerShellFails_FallsBackToNetsh(t *testing.T) {
 	orig := runner
 	t.Cleanup(func() { runner = orig })
 	runner = &sequenceRunner{outputs: []mockRunner{
@@ -208,16 +209,16 @@ func TestWSL_PowerShellFails_FallsBackToNetsh(t *testing.T) {
 		{output: []byte("    SSID                   : NetshNetwork\r\n    BSSID                  : aa:bb:cc:dd:ee:ff\r\n")},
 	}}
 
-	ssid, err := currentSSIDWSL()
+	ssid, err := currentSSIDWindows()
 	if err != nil {
-		t.Fatalf("currentSSIDWSL() error = %v", err)
+		t.Fatalf("currentSSIDWindows() error = %v", err)
 	}
 	if ssid != "NetshNetwork" {
-		t.Fatalf("currentSSIDWSL() = %q, want %q", ssid, "NetshNetwork")
+		t.Fatalf("currentSSIDWindows() = %q, want %q", ssid, "NetshNetwork")
 	}
 }
 
-func TestWSL_PowerShellEmpty_FallsBackToNetsh(t *testing.T) {
+func TestWindows_PowerShellEmpty_FallsBackToNetsh(t *testing.T) {
 	orig := runner
 	t.Cleanup(func() { runner = orig })
 	runner = &sequenceRunner{outputs: []mockRunner{
@@ -225,16 +226,16 @@ func TestWSL_PowerShellEmpty_FallsBackToNetsh(t *testing.T) {
 		{output: []byte("    SSID                   : NetshNetwork\r\n    BSSID                  : aa:bb:cc:dd:ee:ff\r\n")},
 	}}
 
-	ssid, err := currentSSIDWSL()
+	ssid, err := currentSSIDWindows()
 	if err != nil {
-		t.Fatalf("currentSSIDWSL() error = %v", err)
+		t.Fatalf("currentSSIDWindows() error = %v", err)
 	}
 	if ssid != "NetshNetwork" {
-		t.Fatalf("currentSSIDWSL() = %q, want %q", ssid, "NetshNetwork")
+		t.Fatalf("currentSSIDWindows() = %q, want %q", ssid, "NetshNetwork")
 	}
 }
 
-func TestWSL_BothFail(t *testing.T) {
+func TestWindows_BothFail(t *testing.T) {
 	orig := runner
 	t.Cleanup(func() { runner = orig })
 	runner = &sequenceRunner{outputs: []mockRunner{
@@ -242,12 +243,12 @@ func TestWSL_BothFail(t *testing.T) {
 		{err: errors.New("netsh not found")},
 	}}
 
-	ssid, err := currentSSIDWSL()
+	ssid, err := currentSSIDWindows()
 	if err != nil {
-		t.Fatalf("currentSSIDWSL() error = %v, want nil", err)
+		t.Fatalf("currentSSIDWindows() error = %v, want nil", err)
 	}
 	if ssid != "" {
-		t.Fatalf("currentSSIDWSL() = %q, want empty string", ssid)
+		t.Fatalf("currentSSIDWindows() = %q, want empty string", ssid)
 	}
 }
 

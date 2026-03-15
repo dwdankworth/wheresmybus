@@ -5,8 +5,16 @@ Uses the [OneBusAway](https://pugetsound.onebusaway.org/) API for King County Me
 
 ## Quick Start
 
+**Linux / macOS / WSL:**
+
 ```sh
 ./setup.sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+.\setup.ps1
 ```
 
 The setup script will verify Go is installed, build the CLI, offer to add it to your PATH, and walk you through configuring your `.env` file.
@@ -44,7 +52,11 @@ OFFICE_STOP_ID=1_12345
 Automatic install + PATH + .env config:
 
 ```sh
+# Linux / macOS / WSL
 ./setup.sh
+
+# Windows (PowerShell)
+.\setup.ps1
 ```
 
 ```sh
@@ -54,7 +66,11 @@ go install github.com/dwdankworth/wheresmybus@latest
 Or build locally:
 
 ```sh
+# Linux / macOS / WSL
 go build -o wheresmybus .
+
+# Windows
+go build -o wheresmybus.exe .
 ```
 
 ## Usage
@@ -73,6 +89,12 @@ wheresmybus --direction office
 - Connected to your **home wifi** → shows arrivals at your **office stop** (you're heading to work)
 - Connected to your **office wifi** → shows arrivals at your **home stop** (you're heading home)
 - Not on either network → use `--direction` flag
+
+| Platform | Method |
+|---|---|
+| Linux | `nmcli` (NetworkManager) |
+| macOS | `airport` utility |
+| Windows / WSL | PowerShell `Get-NetConnectionProfile`, with `netsh` fallback |
 
 ### Example output
 

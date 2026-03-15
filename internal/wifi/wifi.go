@@ -25,11 +25,13 @@ func CurrentSSID() (string, error) {
 	switch runtime.GOOS {
 	case "linux":
 		if isWSL() {
-			return currentSSIDWSL()
+			return currentSSIDWindows()
 		}
 		return currentSSIDLinux()
 	case "darwin":
 		return currentSSIDDarwin()
+	case "windows":
+		return currentSSIDWindows()
 	default:
 		return "", fmt.Errorf("wifi detection not supported on %s", runtime.GOOS)
 	}
@@ -96,8 +98,10 @@ func currentSSIDDarwin() (string, error) {
 	return "", nil
 }
 
-func currentSSIDWSL() (string, error) {
-	// PowerShell doesn't require Location Services or elevation, unlike netsh.exe.
+// currentSSIDWindows detects WiFi via PowerShell with a netsh fallback.
+// Works on both native Windows and WSL (which can invoke Windows executables).
+func currentSSIDWindows() (string, error) {
+	// PowerShell doesn't require Location Services or elevation, unlike netsh.
 	ssid, err := currentSSIDPowerShell()
 	if err == nil && ssid != "" {
 		return ssid, nil
