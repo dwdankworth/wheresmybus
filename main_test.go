@@ -237,3 +237,32 @@ func TestValidateFlags(t *testing.T) {
 		})
 	}
 }
+
+func TestVersionOutput(t *testing.T) {
+	originalVersion := version
+	t.Cleanup(func() {
+		version = originalVersion
+	})
+
+	tests := []struct {
+		name        string
+		version     string
+		wantVersion string
+	}{
+		{name: "explicit version", version: "v1.2.3", wantVersion: "v1.2.3"},
+		{name: "empty version falls back to dev", version: "", wantVersion: "dev"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			version = tt.version
+
+			got := versionString()
+			want := "wheresmybus version " + tt.wantVersion
+
+			if got != want {
+				t.Fatalf("version output = %q, want %q", got, want)
+			}
+		})
+	}
+}

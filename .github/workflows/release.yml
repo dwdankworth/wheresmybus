@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.5.0
+
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run tests
+        shell: bash
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+  release:
+    name: Build and publish release
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build release archives
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p dist/stage
+
+          while IFS='|' read -r goos goarch archive_ext; do
+            archive_base="wheresmybus_${VERSION}_${goos}_${goarch}"
+            stage_dir="dist/stage/${archive_base}"
+            binary_name="wheresmybus"
+
+            if [ "$goos" = "windows" ]; then
+              binary_name="${binary_name}.exe"
+            fi
+
+            mkdir -p "$stage_dir"
+
+            GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
+              go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "${stage_dir}/${binary_name}" .
+
+            cp README.md .env.example "${stage_dir}/"
+
+            if [ "$archive_ext" = "zip" ]; then
+              (
+                cd dist/stage
+                zip -qr "../${archive_base}.zip" "${archive_base}"
+              )
+              continue
+            fi
+
+            (
+              cd dist/stage
+              tar -czf "../${archive_base}.tar.gz" "${archive_base}"
+            )
+          done <<'TARGETS'
+          linux|amd64|tar.gz
+          linux|arm64|tar.gz
+          darwin|amd64|tar.gz
+          darwin|arm64|tar.gz
+          windows|amd64|zip
+          windows|arm64|zip
+          TARGETS
+
+          (
+            cd dist
+            sha256sum wheresmybus_* > checksums.txt
+          )
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+          generate_release_notes: true

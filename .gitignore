@@ -1,2 +1,4 @@
 .env
+coverage.out
+dist/
 wheresmybus

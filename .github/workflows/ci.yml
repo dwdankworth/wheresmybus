@@ -41,15 +41,34 @@ jobs:
           overwrite: true
 
   build:
-    name: Build
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
     needs: [lint, test]
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            output: wheresmybus
+          - goos: linux
+            goarch: arm64
+            output: wheresmybus
+          - goos: darwin
+            goarch: amd64
+            output: wheresmybus
+          - goos: darwin
+            goarch: arm64
+            output: wheresmybus
+          - goos: windows
+            goarch: amd64
+            output: wheresmybus.exe
+          - goos: windows
+            goarch: arm64
+            output: wheresmybus.exe
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Build binary (Linux)
-        run: go build -o wheresmybus .
-      - name: Build binary (Windows)
-        run: GOOS=windows go build -o wheresmybus.exe .
+      - name: Build binary
+        run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 go build -trimpath -o ${{ matrix.output }} .
