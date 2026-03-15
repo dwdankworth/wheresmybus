@@ -239,14 +239,10 @@ func TestGetArrivals_URLConstruction(t *testing.T) {
 }
 
 func TestGetArrivalsForStop_UsesExactStopIDWithoutResolution(t *testing.T) {
-	var searchCalled bool
 	var arrivalsPath string
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/where/search/stop.json":
-			searchCalled = true
-			t.Fatalf("did not expect stop search lookup for exact stop ID")
 		case "/api/where/arrivals-and-departures-for-stop/1_75403.json":
 			arrivalsPath = r.URL.Path
 			w.Header().Set("Content-Type", "application/json")
@@ -267,26 +263,16 @@ func TestGetArrivalsForStop_UsesExactStopIDWithoutResolution(t *testing.T) {
 	if resolvedStopID != "1_75403" {
 		t.Fatalf("resolved stop ID = %q, want %q", resolvedStopID, "1_75403")
 	}
-	if searchCalled {
-		t.Fatal("stop search endpoint was called unexpectedly")
-	}
 	if arrivalsPath != "/api/where/arrivals-and-departures-for-stop/1_75403.json" {
 		t.Fatalf("arrivals path = %q, want exact stop path", arrivalsPath)
 	}
 }
 
 func TestGetArrivalsForStop_ResolvesBareStopCode(t *testing.T) {
-	var searchInput string
-	var searchMaxCount string
 	var arrivalsPath string
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/where/search/stop.json":
-			searchInput = r.URL.Query().Get("input")
-			searchMaxCount = r.URL.Query().Get("maxCount")
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"list":[{"code":"71335","id":"1_71335"},{"code":"171335","id":"1_171335"},{"code":"71335","id":"1_71335"}]}}`)
 		case "/api/where/arrivals-and-departures-for-stop/1_71335.json":
 			arrivalsPath = r.URL.Path
 			w.Header().Set("Content-Type", "application/json")
@@ -307,28 +293,37 @@ func TestGetArrivalsForStop_ResolvesBareStopCode(t *testing.T) {
 	if len(arrivals) != 1 {
 		t.Fatalf("expected 1 arrival, got %d", len(arrivals))
 	}
-	if searchInput != "71335" {
-		t.Fatalf("search input = %q, want %q", searchInput, "71335")
-	}
-	if searchMaxCount != "100" {
-		t.Fatalf("search maxCount = %q, want %q", searchMaxCount, "100")
-	}
 	if arrivalsPath != "/api/where/arrivals-and-departures-for-stop/1_71335.json" {
 		t.Fatalf("arrivals path = %q, want resolved stop path", arrivalsPath)
 	}
 }
 
+func TestGetArrivalsForStop_BareStopCodeUsesPugetSoundPrefix(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/where/arrivals-and-departures-for-stop/1_25100.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"arrivalsAndDepartures":[]}}}`)
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	_, resolvedStopID, err := getArrivals(server.Client(), server.URL, "test-api-key", "25100")
+	if err != nil {
+		t.Fatalf("getArrivals returned error: %v", err)
+	}
+	if resolvedStopID != "1_25100" {
+		t.Fatalf("resolved stop ID = %q, want %q", resolvedStopID, "1_25100")
+	}
+}
+
 func TestGetArrivalsForStop_BareStopCodeNotFound(t *testing.T) {
-	var arrivalsCalled bool
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/where/search/stop.json":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"list":[{"code":"171335","id":"1_171335"}]}}`)
-		case "/api/where/arrivals-and-departures-for-stop/1_171335.json":
-			arrivalsCalled = true
-			t.Fatalf("did not expect arrivals lookup when no stop matched")
+		case "/api/where/arrivals-and-departures-for-stop/1_71335.json":
+			http.Error(w, `{"code":404,"text":"resource not found"}`, http.StatusNotFound)
 		default:
 			t.Fatalf("unexpected path %q", r.URL.Path)
 		}
@@ -339,61 +334,10 @@ func TestGetArrivalsForStop_BareStopCodeNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if !strings.Contains(err.Error(), "stop code 71335 was not found in Puget Sound OneBusAway") {
+	if !strings.Contains(err.Error(), "unexpected HTTP status 404") {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if arrivalsCalled {
-		t.Fatal("arrivals lookup was called unexpectedly")
-	}
-}
-
-func TestGetArrivalsForStop_BareStopCodeAmbiguous(t *testing.T) {
-	var arrivalsCalled bool
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/api/where/search/stop.json":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"list":[{"code":"71335","id":"40_71335"},{"code":"71335","id":"1_71335"}]}}`)
-		case "/api/where/arrivals-and-departures-for-stop/1_71335.json", "/api/where/arrivals-and-departures-for-stop/40_71335.json":
-			arrivalsCalled = true
-			t.Fatalf("did not expect arrivals lookup when stop code was ambiguous")
-		default:
-			t.Fatalf("unexpected path %q", r.URL.Path)
-		}
-	}))
-	defer server.Close()
-
-	_, _, err := getArrivals(server.Client(), server.URL, "test-api-key", "71335")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !strings.Contains(err.Error(), "stop code 71335 matched multiple Puget Sound stop IDs: 1_71335, 40_71335") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if arrivalsCalled {
-		t.Fatal("arrivals lookup was called unexpectedly")
-	}
-}
-
-func TestGetArrivalsForStop_BareStopCodeRateLimited(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/api/where/search/stop.json":
-			w.WriteHeader(http.StatusTooManyRequests)
-			_, _ = fmt.Fprint(w, `{"code":429,"text":"rate limit exceeded"}`)
-		default:
-			t.Fatalf("unexpected path %q", r.URL.Path)
-		}
-	}))
-	defer server.Close()
-
-	_, _, err := getArrivals(server.Client(), server.URL, "test-api-key", "71335")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "resolve stop code 71335: search stops for code 71335: rate limited by OneBusAway") {
+	if !strings.Contains(err.Error(), `{"code":404,"text":"resource not found"}`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

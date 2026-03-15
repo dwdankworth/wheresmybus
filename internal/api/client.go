@@ -6,11 +6,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sort"
-	"strings"
 )
 
 const baseURL = "https://api.pugetsound.onebusaway.org"
+const pugetSoundAgencyID = "1"
 
 type Arrival struct {
 	RouteShortName       string `json:"routeShortName"`
@@ -31,17 +30,6 @@ type obaResponse struct {
 		Entry struct {
 			ArrivalsAndDepartures []Arrival `json:"arrivalsAndDepartures"`
 		} `json:"entry"`
-	} `json:"data"`
-}
-
-type stopSearchResponse struct {
-	Code int    `json:"code"`
-	Text string `json:"text"`
-	Data struct {
-		List []struct {
-			Code string `json:"code"`
-			ID   string `json:"id"`
-		} `json:"list"`
 	} `json:"data"`
 }
 
@@ -105,61 +93,7 @@ func resolveStopID(client *http.Client, apiBaseURL, apiKey, stopRef string) (str
 		return stopRef, nil
 	}
 
-	matches, err := searchStopIDs(client, apiBaseURL, apiKey, stopRef)
-	if err != nil {
-		return "", fmt.Errorf("resolve stop code %s: %w", stopRef, err)
-	}
-
-	switch len(matches) {
-	case 0:
-		return "", fmt.Errorf("stop code %s was not found in Puget Sound OneBusAway; use a full stop ID if you already know it", stopRef)
-	case 1:
-		return matches[0], nil
-	default:
-		sort.Strings(matches)
-		return "", fmt.Errorf("stop code %s matched multiple Puget Sound stop IDs: %s; use a full stop ID", stopRef, strings.Join(matches, ", "))
-	}
-}
-
-func searchStopIDs(client *http.Client, apiBaseURL, apiKey, stopCode string) ([]string, error) {
-	requestURL := fmt.Sprintf("%s/api/where/search/stop.json?%s", apiBaseURL, url.Values{
-		"input":    []string{stopCode},
-		"key":      []string{apiKey},
-		"maxCount": []string{"100"},
-	}.Encode())
-
-	resp, err := client.Get(requestURL)
-	if err != nil {
-		return nil, fmt.Errorf("search stops for code %s: %w", stopCode, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := readOKResponseBody(resp)
-	if err != nil {
-		return nil, fmt.Errorf("search stops for code %s: %w", stopCode, err)
-	}
-
-	var searchResp stopSearchResponse
-	if err := json.Unmarshal(body, &searchResp); err != nil {
-		return nil, fmt.Errorf("search stops for code %s: unmarshal response: %w", stopCode, err)
-	}
-
-	if searchResp.Code != http.StatusOK {
-		return nil, fmt.Errorf("search stops for code %s: onebusaway error %d: %s", stopCode, searchResp.Code, searchResp.Text)
-	}
-
-	seen := make(map[string]bool)
-	stopIDs := make([]string, 0, len(searchResp.Data.List))
-	for _, stop := range searchResp.Data.List {
-		if stop.Code != stopCode || stop.ID == "" || seen[stop.ID] {
-			continue
-		}
-		seen[stop.ID] = true
-		stopIDs = append(stopIDs, stop.ID)
-	}
-
-	sort.Strings(stopIDs)
-	return stopIDs, nil
+	return fmt.Sprintf("%s_%s", pugetSoundAgencyID, stopRef), nil
 }
 
 func arrivalsURL(apiBaseURL, apiKey, stopID string) string {
