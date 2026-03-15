@@ -107,7 +107,9 @@ fi
 # ---------- 5. Configure .env ----------
 printf '\n%bConfigure .env%b\n' "$BOLD" "$RESET"
 
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/wheresmybus"
+if ! CONFIG_DIR="$(./wheresmybus --print-config-dir)"; then
+  fail "Could not determine the config directory."
+fi
 ENV_FILE="$CONFIG_DIR/.env"
 
 if [[ -f "$ENV_FILE" ]]; then

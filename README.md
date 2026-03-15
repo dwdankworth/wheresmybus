@@ -31,6 +31,7 @@ The setup script will verify Go is installed, build the CLI, offer to add it to 
 3. Environment variables directly, if no `.env` file is found
 
 The setup scripts write `.env` to the platform-specific config directory so the installed binary works from any directory.
+You can print the exact directory for your machine with `wheresmybus --print-config-dir`.
 
 ## Manual Setup
 

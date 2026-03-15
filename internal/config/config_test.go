@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -300,11 +301,34 @@ func TestLoad_NoEnvFile(t *testing.T) {
 }
 
 func TestConfigDir(t *testing.T) {
+	fakeHome := t.TempDir()
+	fakeAppData := filepath.Join(fakeHome, "AppData", "Roaming")
+
+	t.Setenv("HOME", fakeHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(fakeHome, ".config"))
+	t.Setenv("APPDATA", fakeAppData)
+
 	dir := ConfigDir()
 	if dir == "" {
 		t.Fatal("ConfigDir() returned empty string")
 	}
-	if !strings.HasSuffix(dir, appName) {
-		t.Fatalf("ConfigDir() = %q, want suffix %q", dir, appName)
+
+	var want string
+	switch runtime.GOOS {
+	case "linux":
+		want = filepath.Join(fakeHome, ".config", appName)
+	case "darwin":
+		want = filepath.Join(fakeHome, "Library", "Application Support", appName)
+	case "windows":
+		want = filepath.Join(fakeAppData, appName)
+	default:
+		if !strings.HasSuffix(dir, appName) {
+			t.Fatalf("ConfigDir() = %q, want suffix %q", dir, appName)
+		}
+		return
+	}
+
+	if dir != want {
+		t.Fatalf("ConfigDir() = %q, want %q", dir, want)
 	}
 }

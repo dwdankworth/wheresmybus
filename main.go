@@ -15,7 +15,18 @@ const maxResults = 5
 
 func main() {
 	direction := flag.String("direction", "", "Which stop to query: 'home' or 'office'")
+	printConfigDir := flag.Bool("print-config-dir", false, "Print the platform-specific config directory and exit")
 	flag.Parse()
+
+	if *printConfigDir {
+		dir := config.ConfigDir()
+		if dir == "" {
+			fmt.Fprintln(os.Stderr, "Error: could not determine config directory")
+			os.Exit(1)
+		}
+		fmt.Println(dir)
+		return
+	}
 
 	if *direction != "" && *direction != "home" && *direction != "office" {
 		fmt.Fprintf(os.Stderr, "Error: --direction must be 'home' or 'office'\n")

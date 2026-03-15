@@ -107,7 +107,10 @@ if ($answer -match '^[Yy]') {
 Write-Host ''
 Write-Host 'Configure .env' -ForegroundColor White
 
-$ConfigDir = Join-Path $env:APPDATA 'wheresmybus'
+$ConfigDir = & (Join-Path $ScriptDir 'wheresmybus.exe') --print-config-dir
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($ConfigDir)) {
+    Fail 'Could not determine the config directory.'
+}
 $envFile = Join-Path $ConfigDir '.env'
 
 if (Test-Path $envFile) {
