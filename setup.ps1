@@ -112,6 +112,7 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($ConfigDir)) {
     Fail 'Could not determine the config directory.'
 }
 $envFile = Join-Path $ConfigDir '.env'
+$legacyEnvFile = Join-Path $ScriptDir '.env'
 
 if (Test-Path $envFile) {
     $reconfig = Read-Host '  .env already exists. Reconfigure? [y/N]'
@@ -124,6 +125,19 @@ if (Test-Path $envFile) {
         Write-Host 'Run ' -NoNewline; Write-Host 'wheresmybus' -ForegroundColor White -NoNewline; Write-Host ' to see your next bus.'
         exit 0
     }
+}
+
+if (Test-Path $legacyEnvFile) {
+    if (-not (Test-Path $ConfigDir)) {
+        New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
+    }
+    Copy-Item $legacyEnvFile $envFile -Force
+    Ok "Copied existing .env from $legacyEnvFile to $envFile"
+    Write-Host ''
+    Write-Host 'Setup complete!' -ForegroundColor Green
+    Write-Host "Config stored at $envFile"
+    Write-Host 'Run ' -NoNewline; Write-Host 'wheresmybus' -ForegroundColor White -NoNewline; Write-Host ' to see your next bus.'
+    exit 0
 }
 
 Info "Let's configure your settings."

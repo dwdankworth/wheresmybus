@@ -111,6 +111,7 @@ if ! CONFIG_DIR="$(./wheresmybus --print-config-dir)"; then
   fail "Could not determine the config directory."
 fi
 ENV_FILE="$CONFIG_DIR/.env"
+LEGACY_ENV_FILE="$SCRIPT_DIR/.env"
 
 if [[ -f "$ENV_FILE" ]]; then
   read -rp "  .env already exists. Reconfigure? [y/N] " reconfig
@@ -122,6 +123,16 @@ if [[ -f "$ENV_FILE" ]]; then
     printf 'Run %bwheresmybus%b to see your next bus.\n' "$BOLD" "$RESET"
     exit 0
   fi
+fi
+
+if [[ -f "$LEGACY_ENV_FILE" ]]; then
+  mkdir -p "$CONFIG_DIR"
+  cp "$LEGACY_ENV_FILE" "$ENV_FILE"
+  ok "Copied existing .env from ${LEGACY_ENV_FILE} to ${ENV_FILE}"
+  printf '\n%b%bSetup complete!%b\n' "$GREEN" "$BOLD" "$RESET"
+  printf 'Configuration is stored in %b%s%b.\n' "$BOLD" "$ENV_FILE" "$RESET"
+  printf 'Run %bwheresmybus%b to see your next bus.\n' "$BOLD" "$RESET"
+  exit 0
 fi
 
 info "Let's configure your settings."
