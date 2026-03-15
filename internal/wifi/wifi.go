@@ -2,6 +2,7 @@ package wifi
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -23,12 +24,25 @@ var runner commandRunner = execRunner{}
 func CurrentSSID() (string, error) {
 	switch runtime.GOOS {
 	case "linux":
+		if isWSL() {
+			return currentSSIDWSL()
+		}
 		return currentSSIDLinux()
 	case "darwin":
 		return currentSSIDDarwin()
 	default:
 		return "", fmt.Errorf("wifi detection not supported on %s", runtime.GOOS)
 	}
+}
+
+// isWSL reports whether the process is running inside Windows Subsystem for Linux.
+func isWSL() bool {
+	data, err := os.ReadFile("/proc/version")
+	if err != nil {
+		return false
+	}
+	lower := strings.ToLower(string(data))
+	return strings.Contains(lower, "microsoft") || strings.Contains(lower, "wsl")
 }
 
 func currentSSIDLinux() (string, error) {
@@ -65,6 +79,34 @@ func currentSSIDDarwin() (string, error) {
 	for _, line := range strings.Split(string(output), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if !strings.HasPrefix(trimmed, "SSID:") {
+			continue
+		}
+
+		_, ssid, found := strings.Cut(trimmed, ":")
+		if !found {
+			continue
+		}
+
+		ssid = strings.TrimSpace(ssid)
+		if ssid != "" {
+			return ssid, nil
+		}
+	}
+
+	return "", nil
+}
+
+func currentSSIDWSL() (string, error) {
+	output, err := runner.Output("netsh.exe", "wlan", "show", "interfaces")
+	if err != nil {
+		return "", nil
+	}
+
+	for _, line := range strings.Split(string(output), "\n") {
+		trimmed := strings.TrimSpace(line)
+		// Handle both "SSID" and localized "SSID" with possible leading content.
+		// The line looks like: "    SSID                   : MyNetwork"
+		if !strings.Contains(trimmed, "SSID") || strings.Contains(trimmed, "BSSID") {
 			continue
 		}
 

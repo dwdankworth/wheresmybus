@@ -125,3 +125,59 @@ func TestParseDarwinSSID_CommandFails(t *testing.T) {
 		t.Fatalf("currentSSIDDarwin() = %q, want empty string", ssid)
 	}
 }
+
+func TestParseWSLSSID_Connected(t *testing.T) {
+	orig := runner
+	t.Cleanup(func() { runner = orig })
+	runner = mockRunner{output: []byte("    Name                   : Wi-Fi\r\n    Description            : Intel(R) Wi-Fi 6 AX201 160MHz\r\n    GUID                   : abcdef\r\n    Physical address       : aa:bb:cc:dd:ee:ff\r\n    State                  : connected\r\n    SSID                   : MyHomeNetwork\r\n    BSSID                  : aa:bb:cc:dd:ee:ff\r\n    Network type           : Infrastructure\r\n")}
+
+	ssid, err := currentSSIDWSL()
+	if err != nil {
+		t.Fatalf("currentSSIDWSL() error = %v", err)
+	}
+	if ssid != "MyHomeNetwork" {
+		t.Fatalf("currentSSIDWSL() = %q, want %q", ssid, "MyHomeNetwork")
+	}
+}
+
+func TestParseWSLSSID_Disconnected(t *testing.T) {
+	orig := runner
+	t.Cleanup(func() { runner = orig })
+	runner = mockRunner{output: []byte("    Name                   : Wi-Fi\r\n    Description            : Intel(R) Wi-Fi 6 AX201 160MHz\r\n    State                  : disconnected\r\n")}
+
+	ssid, err := currentSSIDWSL()
+	if err != nil {
+		t.Fatalf("currentSSIDWSL() error = %v", err)
+	}
+	if ssid != "" {
+		t.Fatalf("currentSSIDWSL() = %q, want empty string", ssid)
+	}
+}
+
+func TestParseWSLSSID_CommandFails(t *testing.T) {
+	orig := runner
+	t.Cleanup(func() { runner = orig })
+	runner = mockRunner{err: errors.New("command failed")}
+
+	ssid, err := currentSSIDWSL()
+	if err != nil {
+		t.Fatalf("currentSSIDWSL() error = %v, want nil", err)
+	}
+	if ssid != "" {
+		t.Fatalf("currentSSIDWSL() = %q, want empty string", ssid)
+	}
+}
+
+func TestParseWSLSSID_SkipsBSSID(t *testing.T) {
+	orig := runner
+	t.Cleanup(func() { runner = orig })
+	runner = mockRunner{output: []byte("    SSID                   : MyNetwork\r\n    BSSID                  : aa:bb:cc:dd:ee:ff\r\n")}
+
+	ssid, err := currentSSIDWSL()
+	if err != nil {
+		t.Fatalf("currentSSIDWSL() error = %v", err)
+	}
+	if ssid != "MyNetwork" {
+		t.Fatalf("currentSSIDWSL() = %q, want %q", ssid, "MyNetwork")
+	}
+}
