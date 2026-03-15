@@ -13,7 +13,7 @@ import (
 func TestGetArrivalsFromURL_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{
+		_, _ = fmt.Fprint(w, `{
   "code": 200,
   "text": "OK",
   "data": {
@@ -87,7 +87,7 @@ func TestGetArrivalsFromURL_HTTPError404(t *testing.T) {
 func TestGetArrivalsFromURL_HTTPError500(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(w, "internal server error")
+		_, _ = fmt.Fprint(w, "internal server error")
 	}))
 	defer server.Close()
 
@@ -104,7 +104,7 @@ func TestGetArrivalsFromURL_HTTPError500(t *testing.T) {
 func TestGetArrivalsFromURL_MalformedJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{invalid json`)
+		_, _ = fmt.Fprint(w, `{invalid json`)
 	}))
 	defer server.Close()
 
