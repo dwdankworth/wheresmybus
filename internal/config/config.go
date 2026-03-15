@@ -57,7 +57,7 @@ func Load() (*Config, error) {
 	cfg, err := LoadFromEnv()
 	if err != nil {
 		if !loaded {
-			return nil, fmt.Errorf("%w\n\nNo .env file found. Searched:\n  1. .env (current directory)\n  2. %s\n\nRun the setup script or copy .env.example to one of the above locations.",
+			return nil, fmt.Errorf("%w (no .env found in current directory or %s)",
 				err, configFilePath())
 		}
 		return nil, err

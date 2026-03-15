@@ -19,7 +19,9 @@ func clearEnvVars(t *testing.T) {
 	t.Helper()
 	for _, key := range requiredEnvVars {
 		t.Setenv(key, "")  // save original for cleanup
-		os.Unsetenv(key)   // actually remove so godotenv can set from file
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatalf("Unsetenv(%q): %v", key, err)
+		}
 	}
 }
 
@@ -166,11 +168,15 @@ func TestLoad_ConfigDirFallback(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
-	// Put .env in a fake config dir
-	fakeConfigHome := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", fakeConfigHome)
+	// Override HOME so os.UserConfigDir() resolves to a temp location
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
 
-	writeEnvFile(t, filepath.Join(fakeConfigHome, appName))
+	cfgDir := ConfigDir()
+	if cfgDir == "" {
+		t.Fatal("ConfigDir() returned empty string")
+	}
+	writeEnvFile(t, cfgDir)
 
 	cfg, err := Load()
 	if err != nil {
@@ -202,9 +208,14 @@ OFFICE_STOP_ID=cwd-office-stop
 	}
 
 	// Config dir .env with different values
-	fakeConfigHome := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", fakeConfigHome)
-	writeEnvFile(t, filepath.Join(fakeConfigHome, appName))
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+
+	cfgDir := ConfigDir()
+	if cfgDir == "" {
+		t.Fatal("ConfigDir() returned empty string")
+	}
+	writeEnvFile(t, cfgDir)
 
 	if err := os.Chdir(cwdDir); err != nil {
 		t.Fatalf("Chdir(%q): %v", cwdDir, err)
@@ -271,8 +282,8 @@ func TestLoad_NoEnvFile(t *testing.T) {
 	if !strings.Contains(errMsg, "missing required environment variables") {
 		t.Fatalf("error = %q, want to contain %q", errMsg, "missing required environment variables")
 	}
-	if !strings.Contains(errMsg, "No .env file found") {
-		t.Fatalf("error = %q, want to contain %q", errMsg, "No .env file found")
+	if !strings.Contains(errMsg, "no .env found") {
+		t.Fatalf("error = %q, want to contain %q", errMsg, "no .env found")
 	}
 }
 

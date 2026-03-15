@@ -24,7 +24,7 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n\nRun the setup script or copy .env.example to the config directory.\nSee: wheresmybus --help or the README for details.\n", err)
 		os.Exit(1)
 	}
 
