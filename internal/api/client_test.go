@@ -103,6 +103,27 @@ func TestGetArrivalsFromURL_HTTPError500(t *testing.T) {
 	}
 }
 
+func TestGetArrivalsFromURL_HTTPError429(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = fmt.Fprint(w, `{"code":429,"text":"rate limit exceeded"}`)
+	}))
+	defer server.Close()
+
+	_, err := GetArrivalsFromURL(server.Client(), server.URL)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "rate limited by OneBusAway") {
+		t.Fatalf("expected rate-limit error, got %q", err.Error())
+	}
+
+	if !strings.Contains(err.Error(), `{"code":429,"text":"rate limit exceeded"}`) {
+		t.Fatalf("expected error to contain response body, got %q", err.Error())
+	}
+}
+
 func TestGetArrivalsFromURL_MalformedJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -214,6 +235,110 @@ func TestGetArrivals_URLConstruction(t *testing.T) {
 
 	if receivedKey != apiKey {
 		t.Fatalf("expected key %q, got %q", apiKey, receivedKey)
+	}
+}
+
+func TestGetArrivalsForStop_UsesExactStopIDWithoutResolution(t *testing.T) {
+	var arrivalsPath string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/where/arrivals-and-departures-for-stop/1_75403.json":
+			arrivalsPath = r.URL.Path
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"arrivalsAndDepartures":[]}}}`)
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	arrivals, resolvedStopID, err := getArrivals(server.Client(), server.URL, "test-api-key", "1_75403")
+	if err != nil {
+		t.Fatalf("getArrivals returned error: %v", err)
+	}
+	if len(arrivals) != 0 {
+		t.Fatalf("expected no arrivals, got %d", len(arrivals))
+	}
+	if resolvedStopID != "1_75403" {
+		t.Fatalf("resolved stop ID = %q, want %q", resolvedStopID, "1_75403")
+	}
+	if arrivalsPath != "/api/where/arrivals-and-departures-for-stop/1_75403.json" {
+		t.Fatalf("arrivals path = %q, want exact stop path", arrivalsPath)
+	}
+}
+
+func TestGetArrivalsForStop_ResolvesBareStopCode(t *testing.T) {
+	var arrivalsPath string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/where/arrivals-and-departures-for-stop/1_71335.json":
+			arrivalsPath = r.URL.Path
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"arrivalsAndDepartures":[{"routeShortName":"542","tripHeadsign":"U-District Station","predictedArrivalTime":1700000000000,"scheduledArrivalTime":1700000060000,"numberOfStopsAway":4,"predicted":true,"routeId":"40_100511","stopId":"1_71335","tripId":"40_trip"}]}}}`)
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	arrivals, resolvedStopID, err := getArrivals(server.Client(), server.URL, "test-api-key", "71335")
+	if err != nil {
+		t.Fatalf("getArrivals returned error: %v", err)
+	}
+	if resolvedStopID != "1_71335" {
+		t.Fatalf("resolved stop ID = %q, want %q", resolvedStopID, "1_71335")
+	}
+	if len(arrivals) != 1 {
+		t.Fatalf("expected 1 arrival, got %d", len(arrivals))
+	}
+	if arrivalsPath != "/api/where/arrivals-and-departures-for-stop/1_71335.json" {
+		t.Fatalf("arrivals path = %q, want resolved stop path", arrivalsPath)
+	}
+}
+
+func TestGetArrivalsForStop_BareStopCodeUsesPugetSoundPrefix(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/where/arrivals-and-departures-for-stop/1_25100.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"arrivalsAndDepartures":[]}}}`)
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	_, resolvedStopID, err := getArrivals(server.Client(), server.URL, "test-api-key", "25100")
+	if err != nil {
+		t.Fatalf("getArrivals returned error: %v", err)
+	}
+	if resolvedStopID != "1_25100" {
+		t.Fatalf("resolved stop ID = %q, want %q", resolvedStopID, "1_25100")
+	}
+}
+
+func TestGetArrivalsForStop_BareStopCodeNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/where/arrivals-and-departures-for-stop/1_71335.json":
+			http.Error(w, `{"code":404,"text":"resource not found"}`, http.StatusNotFound)
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	_, _, err := getArrivals(server.Client(), server.URL, "test-api-key", "71335")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unexpected HTTP status 404") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(err.Error(), `{"code":404,"text":"resource not found"}`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

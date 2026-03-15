@@ -180,9 +180,10 @@ fi
 
 # Stop IDs
 printf '\n  %bBus stop IDs%b\n' "$BOLD" "$RESET"
-printf '  Find yours at %bhttps://pugetsound.onebusaway.org%b (e.g. %b1_75403%b)\n' "$BLUE" "$RESET" "$BOLD" "$RESET"
-read -rp "  Home stop ID: " home_stop_id
-read -rp "  Office stop ID: " office_stop_id
+printf '  Find yours at %bhttps://pugetsound.onebusaway.org%b or Google Maps.\n' "$BLUE" "$RESET"
+printf '  Enter either a bare stop code like %b71335%b or a full OBA stop ID like %b1_71335%b.\n' "$BOLD" "$RESET" "$BOLD" "$RESET"
+read -rp "  Home stop code or ID: " home_stop_id
+read -rp "  Office stop code or ID: " office_stop_id
 
 mkdir -p "$CONFIG_DIR"
 cat > "$ENV_FILE" <<EOF

@@ -54,7 +54,7 @@ Sign up at <https://www.soundtransit.org/help-contacts/business-information/open
 
 ### 2. Find your stop IDs
 
-Search for your home and office bus stops at <https://pugetsound.onebusaway.org/>. The stop ID is shown in the URL (e.g., `1_75403`). You can also find stop numbers on Google Maps. The 1_ prefix indicates a King County Metro Bus.
+Search for your home and office bus stops at <https://pugetsound.onebusaway.org/> or Google Maps. Rider-facing tools often show a bare stop code like `71335`, while the OneBusAway API uses a full stop ID like `1_71335`. `wheresmybus` accepts either format in `HOME_STOP_ID` and `OFFICE_STOP_ID`; bare numeric codes are automatically treated as Puget Sound stop IDs by prefixing them with `1_`.
 
 ### 3. Configure .env
 
@@ -84,8 +84,8 @@ Edit the copied `.env` file:
 OBA_API_KEY=your-api-key-here
 HOME_WIFI=MyHomeNetwork
 OFFICE_WIFI=MyOfficeNetwork
-HOME_STOP_ID=1_75403
-OFFICE_STOP_ID=1_12345
+HOME_STOP_ID=75403
+OFFICE_STOP_ID=71335
 # Optional fallback for ethernet/no-Wi-Fi use
 DEFAULT_LOCATION=home
 ```
@@ -118,26 +118,50 @@ go build -o wheresmybus .
 go build -o wheresmybus.exe .
 ```
 
+## Development
+
+CI runs lint, tests, and build. To match CI locally, install the same `golangci-lint` version pinned in `.github/workflows/ci.yml`:
+
+```sh
+GOBIN="${GOBIN:-$(go env GOPATH)/bin}" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0
+```
+
+Then run the local validation commands from the repo root:
+
+```sh
+golangci-lint run
+go test ./...
+go test -race -coverprofile=coverage.out ./...
+go build -o wheresmybus .
+```
+
 ## Usage
 
 ```sh
 # Use Wi-Fi auto-detection, then fall back to DEFAULT_LOCATION if set
 wheresmybus
 
+# Look up any stop directly by stop code or full stop ID
+wheresmybus -stop 12345
+wheresmybus -stop 1_75403
+
 # Explicitly pick a direction
-wheresmybus --direction home
-wheresmybus --direction office
+wheresmybus -direction home
+wheresmybus -direction office
 ```
 
 ### How stop resolution works
 
-- `--direction home` shows arrivals for `OFFICE_STOP_ID`
-- `--direction office` shows arrivals for `HOME_STOP_ID`
+- `-stop 12345` or `-stop 1_75403` queries that stop directly
+- `-direction home` shows arrivals for `OFFICE_STOP_ID`
+- `-direction office` shows arrivals for `HOME_STOP_ID`
 - Connected to `HOME_WIFI` → shows arrivals for `HOME_STOP_ID`
 - Connected to `OFFICE_WIFI` → shows arrivals for `OFFICE_STOP_ID`
 - If Wi-Fi does not resolve and `DEFAULT_LOCATION=home`, it uses `HOME_STOP_ID`
 - If Wi-Fi does not resolve and `DEFAULT_LOCATION=office`, it uses `OFFICE_STOP_ID`
-- If none of the above apply, use `--direction`
+- If none of the above apply, use `-direction`
+
+`-stop` and `-direction` cannot be used together. Bare numeric stop codes are treated as Puget Sound stop IDs and queried as `1_<code>`, so `-stop 25100` behaves the same as `-stop 1_25100`.
 
 | Platform | Method |
 |---|---|

@@ -9,6 +9,7 @@ import (
 )
 
 const baseURL = "https://api.pugetsound.onebusaway.org"
+const pugetSoundAgencyID = "1"
 
 type Arrival struct {
 	RouteShortName       string `json:"routeShortName"`
@@ -33,9 +34,12 @@ type obaResponse struct {
 }
 
 func GetArrivals(apiKey, stopID string) ([]Arrival, error) {
-	requestURL := fmt.Sprintf("%s/api/where/arrivals-and-departures-for-stop/%s.json?%s", baseURL, url.PathEscape(stopID), url.Values{"key": []string{apiKey}}.Encode())
+	arrivals, _, err := GetArrivalsForStop(apiKey, stopID)
+	return arrivals, err
+}
 
-	return GetArrivalsFromURL(http.DefaultClient, requestURL)
+func GetArrivalsForStop(apiKey, stopRef string) ([]Arrival, string, error) {
+	return getArrivals(http.DefaultClient, baseURL, apiKey, stopRef)
 }
 
 func GetArrivalsFromURL(client *http.Client, requestURL string) ([]Arrival, error) {
@@ -49,17 +53,9 @@ func GetArrivalsFromURL(client *http.Client, requestURL string) ([]Arrival, erro
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("unexpected HTTP status %d and failed to read body: %w", resp.StatusCode, err)
-		}
-		return nil, fmt.Errorf("unexpected HTTP status %d: %s", resp.StatusCode, string(body))
-	}
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := readOKResponseBody(resp)
 	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
+		return nil, err
 	}
 
 	var obaResp obaResponse
@@ -72,6 +68,69 @@ func GetArrivalsFromURL(client *http.Client, requestURL string) ([]Arrival, erro
 	}
 
 	return deduplicateArrivals(obaResp.Data.Entry.ArrivalsAndDepartures), nil
+}
+
+func getArrivals(client *http.Client, apiBaseURL, apiKey, stopRef string) ([]Arrival, string, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+
+	resolvedStopID, err := resolveStopID(client, apiBaseURL, apiKey, stopRef)
+	if err != nil {
+		return nil, "", err
+	}
+
+	arrivals, err := GetArrivalsFromURL(client, arrivalsURL(apiBaseURL, apiKey, resolvedStopID))
+	if err != nil {
+		return nil, "", err
+	}
+
+	return arrivals, resolvedStopID, nil
+}
+
+func resolveStopID(client *http.Client, apiBaseURL, apiKey, stopRef string) (string, error) {
+	if !isBareStopCode(stopRef) {
+		return stopRef, nil
+	}
+
+	return fmt.Sprintf("%s_%s", pugetSoundAgencyID, stopRef), nil
+}
+
+func arrivalsURL(apiBaseURL, apiKey, stopID string) string {
+	return fmt.Sprintf("%s/api/where/arrivals-and-departures-for-stop/%s.json?%s", apiBaseURL, url.PathEscape(stopID), url.Values{"key": []string{apiKey}}.Encode())
+}
+
+func readOKResponseBody(resp *http.Response) ([]byte, error) {
+	if resp.StatusCode != http.StatusOK {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("unexpected HTTP status %d and failed to read body: %w", resp.StatusCode, err)
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			return nil, fmt.Errorf("rate limited by OneBusAway (HTTP 429): %s", string(body))
+		}
+		return nil, fmt.Errorf("unexpected HTTP status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	return body, nil
+}
+
+func isBareStopCode(stopRef string) bool {
+	if stopRef == "" {
+		return false
+	}
+
+	for _, r := range stopRef {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func deduplicateArrivals(arrivals []Arrival) []Arrival {
