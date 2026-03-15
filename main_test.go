@@ -22,6 +22,7 @@ func testConfig() *config.Config {
 func TestResolveStop(t *testing.T) {
 	tests := []struct {
 		name             string
+		stop             string
 		direction        string
 		defaultLocation  string
 		detectSSID       func() (string, error)
@@ -29,6 +30,24 @@ func TestResolveStop(t *testing.T) {
 		wantErr          string
 		wantDetectCalled bool
 	}{
+		{
+			name: "explicit stop skips wifi detection",
+			stop: "12345",
+			detectSSID: func() (string, error) {
+				return "HomeNet", nil
+			},
+			wantStop:         "12345",
+			wantDetectCalled: false,
+		},
+		{
+			name: "explicit full stop ID skips wifi detection",
+			stop: "1_75403",
+			detectSSID: func() (string, error) {
+				return "OfficeNet", nil
+			},
+			wantStop:         "1_75403",
+			wantDetectCalled: false,
+		},
 		{
 			name:      "explicit home",
 			direction: "home",
@@ -145,7 +164,7 @@ func TestResolveStop(t *testing.T) {
 			cfg := testConfig()
 			cfg.DefaultLocation = tt.defaultLocation
 
-			got, err := resolveStop(cfg, tt.direction, detectSSID)
+			got, err := resolveStop(cfg, tt.stop, tt.direction, detectSSID)
 
 			if called != tt.wantDetectCalled {
 				t.Fatalf("detectSSID called = %v, want %v", called, tt.wantDetectCalled)
@@ -166,6 +185,54 @@ func TestResolveStop(t *testing.T) {
 			}
 			if got != tt.wantStop {
 				t.Fatalf("stop = %q, want %q", got, tt.wantStop)
+			}
+		})
+	}
+}
+
+func TestValidateFlags(t *testing.T) {
+	tests := []struct {
+		name      string
+		stop      string
+		direction string
+		wantErr   string
+	}{
+		{
+			name:      "stop and direction conflict",
+			stop:      "12345",
+			direction: "home",
+			wantErr:   "-stop and -direction cannot be used together",
+		},
+		{
+			name:      "invalid direction",
+			direction: "elsewhere",
+			wantErr:   "-direction must be 'home' or 'office'",
+		},
+		{
+			name: "stop only is valid",
+			stop: "12345",
+		},
+		{
+			name:      "direction only is valid",
+			direction: "office",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateFlags(tt.stop, tt.direction)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validateFlags returned unexpected error: %v", err)
+				}
+				return
+			}
+
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("error = %q, want substring %q", err.Error(), tt.wantErr)
 			}
 		})
 	}

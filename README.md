@@ -141,20 +141,27 @@ go build -o wheresmybus .
 # Use Wi-Fi auto-detection, then fall back to DEFAULT_LOCATION if set
 wheresmybus
 
+# Look up any stop directly by stop code or full stop ID
+wheresmybus -stop 12345
+wheresmybus -stop 1_75403
+
 # Explicitly pick a direction
-wheresmybus --direction home
-wheresmybus --direction office
+wheresmybus -direction home
+wheresmybus -direction office
 ```
 
 ### How stop resolution works
 
-- `--direction home` shows arrivals for `OFFICE_STOP_ID`
-- `--direction office` shows arrivals for `HOME_STOP_ID`
+- `-stop 12345` or `-stop 1_75403` queries that stop directly
+- `-direction home` shows arrivals for `OFFICE_STOP_ID`
+- `-direction office` shows arrivals for `HOME_STOP_ID`
 - Connected to `HOME_WIFI` → shows arrivals for `HOME_STOP_ID`
 - Connected to `OFFICE_WIFI` → shows arrivals for `OFFICE_STOP_ID`
 - If Wi-Fi does not resolve and `DEFAULT_LOCATION=home`, it uses `HOME_STOP_ID`
 - If Wi-Fi does not resolve and `DEFAULT_LOCATION=office`, it uses `OFFICE_STOP_ID`
-- If none of the above apply, use `--direction`
+- If none of the above apply, use `-direction`
+
+`-stop` and `-direction` cannot be used together. Bare numeric stop codes are resolved automatically; if a stop code is ambiguous across agencies, use the full stop ID instead.
 
 | Platform | Method |
 |---|---|

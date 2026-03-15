@@ -14,6 +14,7 @@ import (
 const maxResults = 5
 
 func main() {
+	stop := flag.String("stop", "", "Query an explicit stop code or full stop ID")
 	direction := flag.String("direction", "", "Which stop to query: 'home' or 'office'")
 	printConfigDir := flag.Bool("print-config-dir", false, "Print the platform-specific config directory and exit")
 	flag.Parse()
@@ -28,18 +29,18 @@ func main() {
 		return
 	}
 
-	if *direction != "" && *direction != "home" && *direction != "office" {
-		fmt.Fprintf(os.Stderr, "Error: --direction must be 'home' or 'office'\n")
+	if err := validateFlags(*stop, *direction); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n\nRun the setup script or copy .env.example to the config directory.\nSee: wheresmybus --help or the README for details.\n", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n\nRun the setup script or copy .env.example to the config directory.\nSee: wheresmybus -help or the README for details.\n", err)
 		os.Exit(1)
 	}
 
-	stopRef, err := resolveStop(cfg, *direction, wifi.CurrentSSID)
+	stopRef, err := resolveStop(cfg, *stop, *direction, wifi.CurrentSSID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -54,7 +55,20 @@ func main() {
 	display.PrintArrivals(arrivals, resolvedStopID, maxResults)
 }
 
-func resolveStop(cfg *config.Config, direction string, detectSSID func() (string, error)) (string, error) {
+func validateFlags(stop, direction string) error {
+	if stop != "" && direction != "" {
+		return fmt.Errorf("-stop and -direction cannot be used together")
+	}
+	if direction != "" && direction != "home" && direction != "office" {
+		return fmt.Errorf("-direction must be 'home' or 'office'")
+	}
+	return nil
+}
+
+func resolveStop(cfg *config.Config, stop, direction string, detectSSID func() (string, error)) (string, error) {
+	if stop != "" {
+		return stop, nil
+	}
 	if direction == "home" {
 		return cfg.OfficeStopID, nil // Going home → catch bus at office stop
 	}
@@ -83,11 +97,11 @@ func resolveStop(cfg *config.Config, direction string, detectSSID func() (string
 	}
 
 	if err != nil {
-		return "", fmt.Errorf("wifi detection failed: %w\nUse --direction home|office instead", err)
+		return "", fmt.Errorf("wifi detection failed: %w\nUse -direction home|office instead", err)
 	}
 
 	if ssid == "" {
-		return "", fmt.Errorf("not connected to wifi\nUse: wheresmybus --direction home|office")
+		return "", fmt.Errorf("not connected to wifi\nUse: wheresmybus -direction home|office")
 	}
-	return "", fmt.Errorf("unknown wifi network %q\nUse: wheresmybus --direction home|office", ssid)
+	return "", fmt.Errorf("unknown wifi network %q\nUse: wheresmybus -direction home|office", ssid)
 }
