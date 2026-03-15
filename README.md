@@ -144,7 +144,7 @@ Automatic install + PATH + .env config:
 .\setup.ps1
 ```
 
-Go install (can only be run from folder):
+Go install:
 
 ```sh
 go install github.com/dwdankworth/wheresmybus@latest
