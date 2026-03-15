@@ -170,13 +170,9 @@ if (-not (Test-Path $ConfigDir)) {
     New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
 }
 
-@"
-OBA_API_KEY=$obaApiKey
-HOME_WIFI=$homeWifi
-OFFICE_WIFI=$officeWifi
-HOME_STOP_ID=$homeStopId
-OFFICE_STOP_ID=$officeStopId
-"@ | Set-Content -Path $envFile -Encoding UTF8 -NoNewline
+$envContent = "OBA_API_KEY=$obaApiKey`nHOME_WIFI=$homeWifi`nOFFICE_WIFI=$officeWifi`nHOME_STOP_ID=$homeStopId`nOFFICE_STOP_ID=$officeStopId"
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($envFile, $envContent, $utf8NoBom)
 
 Ok "Wrote $envFile"
 
