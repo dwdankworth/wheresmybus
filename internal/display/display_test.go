@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dwdan/wheresmybus/internal/api"
+	"github.com/dwdankworth/wheresmybus/internal/api"
 )
 
 func TestTruncate(t *testing.T) {

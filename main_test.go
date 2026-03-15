@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dwdan/wheresmybus/internal/config"
+	"github.com/dwdankworth/wheresmybus/internal/config"
 )
 
 func testConfig() *config.Config {

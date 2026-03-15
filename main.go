@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dwdan/wheresmybus/internal/api"
-	"github.com/dwdan/wheresmybus/internal/config"
-	"github.com/dwdan/wheresmybus/internal/display"
-	"github.com/dwdan/wheresmybus/internal/wifi"
+	"github.com/dwdankworth/wheresmybus/internal/api"
+	"github.com/dwdankworth/wheresmybus/internal/config"
+	"github.com/dwdankworth/wheresmybus/internal/display"
+	"github.com/dwdankworth/wheresmybus/internal/wifi"
 )
 
 const maxResults = 5

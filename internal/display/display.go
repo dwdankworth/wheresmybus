@@ -7,7 +7,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/dwdan/wheresmybus/internal/api"
+	"github.com/dwdankworth/wheresmybus/internal/api"
 )
 
 func PrintArrivals(arrivals []api.Arrival, stopID string, maxResults int) {

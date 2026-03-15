@@ -1,4 +1,4 @@
-module github.com/dwdan/wheresmybus
+module github.com/dwdankworth/wheresmybus
 
 go 1.25.8
 
