@@ -45,7 +45,7 @@ Search for your home and office bus stops at <https://pugetsound.onebusaway.org/
 
 ### 3. Configure .env
 
-Create the config directory, copy the example file there, and fill in your values:
+If you'd like to use the automated setup script, you can skip this step. It will interview you to automatically collect the required env variables and create the .env file in the correct location. Create the config directory, copy the example file there, and fill in your values:
 
 ```sh
 # Linux
