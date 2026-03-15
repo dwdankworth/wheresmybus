@@ -121,7 +121,7 @@ func TestGetArrivalsFromURL_MalformedJSON(t *testing.T) {
 func TestGetArrivalsFromURL_OBAErrorCode(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"code":404,"text":"not found","data":{"entry":{"arrivalsAndDepartures":[]}}}`)
+		_, _ = fmt.Fprint(w, `{"code":404,"text":"not found","data":{"entry":{"arrivalsAndDepartures":[]}}}`)
 	}))
 	defer server.Close()
 
@@ -138,7 +138,7 @@ func TestGetArrivalsFromURL_OBAErrorCode(t *testing.T) {
 func TestGetArrivalsFromURL_EmptyArrivals(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"arrivalsAndDepartures":[]}}}`)
+		_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"arrivalsAndDepartures":[]}}}`)
 	}))
 	defer server.Close()
 
@@ -173,7 +173,7 @@ func TestGetArrivals_URLConstruction(t *testing.T) {
 		receivedPath = r.URL.Path
 		receivedKey = r.URL.Query().Get("key")
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"arrivalsAndDepartures":[]}}}`)
+		_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"arrivalsAndDepartures":[]}}}`)
 	}))
 	defer server.Close()
 
