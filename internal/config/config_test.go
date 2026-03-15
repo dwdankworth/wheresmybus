@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -12,6 +13,30 @@ var requiredEnvVars = []string{
 	"OFFICE_WIFI",
 	"HOME_STOP_ID",
 	"OFFICE_STOP_ID",
+}
+
+func clearEnvVars(t *testing.T) {
+	t.Helper()
+	for _, key := range requiredEnvVars {
+		t.Setenv(key, "")  // save original for cleanup
+		os.Unsetenv(key)   // actually remove so godotenv can set from file
+	}
+}
+
+func writeEnvFile(t *testing.T, dir string) {
+	t.Helper()
+	content := `OBA_API_KEY=file-key
+HOME_WIFI=file-home
+OFFICE_WIFI=file-office
+HOME_STOP_ID=file-home-stop
+OFFICE_STOP_ID=file-office-stop
+`
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q): %v", dir, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
 }
 
 func TestLoadFromEnv_AllPresent(t *testing.T) {
@@ -101,7 +126,131 @@ func TestLoadFromEnv_MissingCases(t *testing.T) {
 	}
 }
 
+func TestLoad_CWDEnvFile(t *testing.T) {
+	clearEnvVars(t)
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd(): %v", err)
+	}
+
+	tempDir := t.TempDir()
+	writeEnvFile(t, tempDir)
+
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Chdir(%q): %v", tempDir, err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.APIKey != "file-key" {
+		t.Fatalf("APIKey = %q, want %q", cfg.APIKey, "file-key")
+	}
+}
+
+func TestLoad_ConfigDirFallback(t *testing.T) {
+	clearEnvVars(t)
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd(): %v", err)
+	}
+
+	// CWD with no .env
+	emptyDir := t.TempDir()
+	if err := os.Chdir(emptyDir); err != nil {
+		t.Fatalf("Chdir(%q): %v", emptyDir, err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	// Put .env in a fake config dir
+	fakeConfigHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", fakeConfigHome)
+
+	writeEnvFile(t, filepath.Join(fakeConfigHome, appName))
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.APIKey != "file-key" {
+		t.Fatalf("APIKey = %q, want %q", cfg.APIKey, "file-key")
+	}
+}
+
+func TestLoad_CWDTakesPriority(t *testing.T) {
+	clearEnvVars(t)
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd(): %v", err)
+	}
+
+	// CWD .env with distinct values
+	cwdDir := t.TempDir()
+	cwdContent := `OBA_API_KEY=cwd-key
+HOME_WIFI=cwd-home
+OFFICE_WIFI=cwd-office
+HOME_STOP_ID=cwd-home-stop
+OFFICE_STOP_ID=cwd-office-stop
+`
+	if err := os.WriteFile(filepath.Join(cwdDir, ".env"), []byte(cwdContent), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Config dir .env with different values
+	fakeConfigHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", fakeConfigHome)
+	writeEnvFile(t, filepath.Join(fakeConfigHome, appName))
+
+	if err := os.Chdir(cwdDir); err != nil {
+		t.Fatalf("Chdir(%q): %v", cwdDir, err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.APIKey != "cwd-key" {
+		t.Fatalf("APIKey = %q, want %q (CWD should take priority)", cfg.APIKey, "cwd-key")
+	}
+}
+
+func TestLoad_EnvVarsWithoutFile(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd(): %v", err)
+	}
+
+	emptyDir := t.TempDir()
+	if err := os.Chdir(emptyDir); err != nil {
+		t.Fatalf("Chdir(%q): %v", emptyDir, err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	// Set env vars directly — should work without any .env file
+	t.Setenv("OBA_API_KEY", "env-key")
+	t.Setenv("HOME_WIFI", "env-home")
+	t.Setenv("OFFICE_WIFI", "env-office")
+	t.Setenv("HOME_STOP_ID", "env-home-stop")
+	t.Setenv("OFFICE_STOP_ID", "env-office-stop")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.APIKey != "env-key" {
+		t.Fatalf("APIKey = %q, want %q", cfg.APIKey, "env-key")
+	}
+}
+
 func TestLoad_NoEnvFile(t *testing.T) {
+	clearEnvVars(t)
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Getwd() error = %v", err)
@@ -111,22 +260,28 @@ func TestLoad_NoEnvFile(t *testing.T) {
 	if err := os.Chdir(tempDir); err != nil {
 		t.Fatalf("Chdir(%q) error = %v", tempDir, err)
 	}
-	t.Cleanup(func() {
-		if err := os.Chdir(cwd); err != nil {
-			t.Fatalf("restore working directory to %q: %v", cwd, err)
-		}
-	})
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
 	_, err = Load()
 	if err == nil {
 		t.Fatal("Load() error = nil, want non-nil")
 	}
 
-	if !strings.Contains(err.Error(), "load .env") {
-		t.Fatalf("Load() error = %q, want to contain %q", err.Error(), "load .env")
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "missing required environment variables") {
+		t.Fatalf("error = %q, want to contain %q", errMsg, "missing required environment variables")
 	}
+	if !strings.Contains(errMsg, "No .env file found") {
+		t.Fatalf("error = %q, want to contain %q", errMsg, "No .env file found")
+	}
+}
 
-	if !strings.Contains(err.Error(), ".env") {
-		t.Fatalf("Load() error = %q, want to mention .env", err.Error())
+func TestConfigDir(t *testing.T) {
+	dir := ConfigDir()
+	if dir == "" {
+		t.Fatal("ConfigDir() returned empty string")
+	}
+	if !strings.HasSuffix(dir, appName) {
+		t.Fatalf("ConfigDir() = %q, want suffix %q", dir, appName)
 	}
 }

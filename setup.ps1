@@ -107,15 +107,17 @@ if ($answer -match '^[Yy]') {
 Write-Host ''
 Write-Host 'Configure .env' -ForegroundColor White
 
-$envFile = Join-Path $ScriptDir '.env'
+$ConfigDir = Join-Path $env:APPDATA 'wheresmybus'
+$envFile = Join-Path $ConfigDir '.env'
 
 if (Test-Path $envFile) {
     $reconfig = Read-Host '  .env already exists. Reconfigure? [y/N]'
     if ([string]::IsNullOrWhiteSpace($reconfig)) { $reconfig = 'N' }
     if ($reconfig -notmatch '^[Yy]') {
-        Ok 'Keeping existing .env'
+        Ok "Keeping existing $envFile"
         Write-Host ''
         Write-Host 'Setup complete!' -ForegroundColor Green
+        Write-Host "Config stored at $envFile"
         Write-Host 'Run ' -NoNewline; Write-Host 'wheresmybus' -ForegroundColor White -NoNewline; Write-Host ' to see your next bus.'
         exit 0
     }
@@ -147,6 +149,10 @@ Write-Host '  Find yours at https://pugetsound.onebusaway.org (e.g. 1_75403)' -F
 $homeStopId = Read-Host '  Home stop ID'
 $officeStopId = Read-Host '  Office stop ID'
 
+if (-not (Test-Path $ConfigDir)) {
+    New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
+}
+
 @"
 OBA_API_KEY=$obaApiKey
 HOME_WIFI=$homeWifi
@@ -155,9 +161,10 @@ HOME_STOP_ID=$homeStopId
 OFFICE_STOP_ID=$officeStopId
 "@ | Set-Content -Path $envFile -Encoding UTF8 -NoNewline
 
-Ok 'Wrote .env'
+Ok "Wrote $envFile"
 
 # ---------- Done ----------
 Write-Host ''
 Write-Host 'Setup complete!' -ForegroundColor Green
+Write-Host "Config stored at $envFile"
 Write-Host 'Run ' -NoNewline; Write-Host 'wheresmybus' -ForegroundColor White -NoNewline; Write-Host ' to see your next bus.'

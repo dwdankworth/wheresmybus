@@ -19,6 +19,19 @@ Uses the [OneBusAway](https://pugetsound.onebusaway.org/) API for King County Me
 
 The setup script will verify Go is installed, build the CLI, offer to add it to your PATH, and walk you through configuring your `.env` file.
 
+## Configuration
+
+`wheresmybus` looks for `.env` in this order:
+
+1. `.env` in the current working directory (backward compatible and useful for local development)
+2. Platform-specific config directory:
+   - Linux: `~/.config/wheresmybus/.env`
+   - macOS: `~/Library/Application Support/wheresmybus/.env`
+   - Windows: `%AppData%\wheresmybus\.env`
+3. Environment variables directly, if no `.env` file is found
+
+The setup scripts write `.env` to the platform-specific config directory so the installed binary works from any directory.
+
 ## Manual Setup
 
 ### 1. Get an API key
@@ -31,13 +44,27 @@ Search for your home and office bus stops at <https://pugetsound.onebusaway.org/
 
 ### 3. Configure .env
 
-Copy the example file and fill in your values:
+Create the config directory, copy the example file there, and fill in your values:
 
 ```sh
-cp .env.example .env
+# Linux
+mkdir -p ~/.config/wheresmybus
+cp .env.example ~/.config/wheresmybus/.env
+
+# macOS
+mkdir -p ~/Library/Application\ Support/wheresmybus
+cp .env.example ~/Library/Application\ Support/wheresmybus/.env
 ```
 
-Edit `.env`:
+```powershell
+# Windows (PowerShell)
+New-Item -ItemType Directory -Force -Path "$env:AppData\wheresmybus" | Out-Null
+Copy-Item .env.example "$env:AppData\wheresmybus\.env"
+```
+
+For local development, `.env` in the current working directory still works.
+
+Edit the copied `.env` file:
 
 ```
 OBA_API_KEY=your-api-key-here
