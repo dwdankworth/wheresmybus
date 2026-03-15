@@ -13,11 +13,19 @@ import (
 
 const maxResults = 5
 
+var version = "dev"
+
 func main() {
 	stop := flag.String("stop", "", "Query an explicit stop code or full stop ID")
 	direction := flag.String("direction", "", "Which stop to query: 'home' or 'office'")
+	printVersion := flag.Bool("version", false, "Print the version and exit")
 	printConfigDir := flag.Bool("print-config-dir", false, "Print the platform-specific config directory and exit")
 	flag.Parse()
+
+	if *printVersion {
+		fmt.Println(versionString())
+		return
+	}
 
 	if *printConfigDir {
 		dir := config.ConfigDir()
@@ -53,6 +61,10 @@ func main() {
 	}
 
 	display.PrintArrivals(arrivals, resolvedStopID, maxResults)
+}
+
+func versionString() string {
+	return fmt.Sprintf("wheresmybus version %s", version)
 }
 
 func validateFlags(stop, direction string) error {

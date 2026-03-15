@@ -5,6 +5,16 @@ Uses the [OneBusAway](https://pugetsound.onebusaway.org/) API for King County Me
 
 ## Quick Start
 
+Want a ready-to-run binary without installing Go? Download the archive for your platform from [GitHub Releases](https://github.com/dwdankworth/wheresmybus/releases), extract it, put the binary on your `PATH`, and follow the configuration steps below.
+
+You can verify the installed binary with:
+
+```sh
+wheresmybus -version
+```
+
+If you'd rather build from source, use the setup scripts:
+
 **Linux / macOS / WSL:**
 
 ```sh
@@ -92,6 +102,38 @@ DEFAULT_LOCATION=home
 
 ### 4. Install
 
+Download a release binary (no Go required):
+
+1. Open <https://github.com/dwdankworth/wheresmybus/releases>
+2. Download the archive matching your OS and CPU architecture
+3. Extract it and copy the binary somewhere on your `PATH`
+4. Run `wheresmybus --print-config-dir` to find the config directory for your machine
+5. Copy `.env.example` from the release archive into that directory as `.env`, then fill in your values
+
+Common install locations:
+
+```sh
+# Linux
+install -Dm755 wheresmybus ~/.local/bin/wheresmybus
+
+# macOS
+install -m 755 wheresmybus /usr/local/bin/wheresmybus
+```
+
+```powershell
+# Windows (PowerShell)
+New-Item -ItemType Directory -Force -Path "$env:LOCALAPPDATA\wheresmybus" | Out-Null
+Copy-Item .\wheresmybus.exe "$env:LOCALAPPDATA\wheresmybus\wheresmybus.exe" -Force
+```
+
+Then add the chosen directory to your `PATH` if needed and run:
+
+```sh
+wheresmybus -version
+```
+
+Source install:
+
 Automatic install + PATH + .env config:
 
 ```sh
@@ -148,6 +190,9 @@ wheresmybus -stop 1_75403
 # Explicitly pick a direction
 wheresmybus -direction home
 wheresmybus -direction office
+
+# Print the binary version
+wheresmybus -version
 ```
 
 ### How stop resolution works

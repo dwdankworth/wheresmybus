@@ -237,3 +237,18 @@ func TestValidateFlags(t *testing.T) {
 		})
 	}
 }
+
+func TestVersionOutput(t *testing.T) {
+	originalVersion := version
+	version = "v1.2.3"
+	t.Cleanup(func() {
+		version = originalVersion
+	})
+
+	got := versionString()
+	want := "wheresmybus version v1.2.3"
+
+	if got != want {
+		t.Fatalf("version output = %q, want %q", got, want)
+	}
+}
