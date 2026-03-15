@@ -17,7 +17,7 @@ Uses the [OneBusAway](https://pugetsound.onebusaway.org/) API for King County Me
 .\setup.ps1
 ```
 
-The setup script will verify Go is installed, build the CLI, offer to add it to your PATH, and walk you through configuring your `.env` file.
+The setup script will verify Go is installed, build the CLI, offer to add it to your PATH, and either reuse an existing repo-local `.env` or walk you through creating one in the config directory.
 
 ## Configuration
 
@@ -30,7 +30,7 @@ The setup script will verify Go is installed, build the CLI, offer to add it to 
    - Windows: `%AppData%\wheresmybus\.env`
 3. Environment variables directly, if no `.env` file is found
 
-The setup scripts write `.env` to the platform-specific config directory so the installed binary works from any directory.
+The setup scripts write `.env` to the platform-specific config directory so the installed binary works from any directory. If you already have a legacy `.env` next to the setup script, setup reuses it by copying it into that config directory.
 You can print the exact directory for your machine with `wheresmybus --print-config-dir`.
 
 ## Manual Setup
