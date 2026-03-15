@@ -19,6 +19,7 @@ type Arrival struct {
 	Predicted            bool   `json:"predicted"`
 	RouteID              string `json:"routeId"`
 	StopID               string `json:"stopId"`
+	TripID               string `json:"tripId"`
 }
 
 type obaResponse struct {
@@ -70,5 +71,19 @@ func GetArrivalsFromURL(client *http.Client, requestURL string) ([]Arrival, erro
 		return nil, fmt.Errorf("onebusaway error %d: %s", obaResp.Code, obaResp.Text)
 	}
 
-	return obaResp.Data.Entry.ArrivalsAndDepartures, nil
+	return deduplicateArrivals(obaResp.Data.Entry.ArrivalsAndDepartures), nil
+}
+
+func deduplicateArrivals(arrivals []Arrival) []Arrival {
+	seen := make(map[string]bool)
+	result := make([]Arrival, 0, len(arrivals))
+	for _, a := range arrivals {
+		if a.TripID == "" || !seen[a.TripID] {
+			if a.TripID != "" {
+				seen[a.TripID] = true
+			}
+			result = append(result, a)
+		}
+	}
+	return result
 }

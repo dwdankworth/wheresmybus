@@ -310,3 +310,80 @@ func assertInOrder(t *testing.T, output string, values ...string) {
 		lastIndex = index
 	}
 }
+
+func TestCollapseBunchedArrivals(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name     string
+		arrivals []api.Arrival
+		want     int
+	}{
+		{
+			name:     "empty input",
+			arrivals: nil,
+			want:     0,
+		},
+		{
+			name: "distinct routes preserved",
+			arrivals: []api.Arrival{
+				{RouteShortName: "44", TripHeadsign: "Downtown", Predicted: true, PredictedArrivalTime: now.Add(4 * time.Minute).UnixMilli()},
+				{RouteShortName: "48", TripHeadsign: "Mt Baker", Predicted: true, PredictedArrivalTime: now.Add(4 * time.Minute).UnixMilli()},
+			},
+			want: 2,
+		},
+		{
+			name: "bunched arrivals on same route collapsed",
+			arrivals: []api.Arrival{
+				{RouteShortName: "67", TripHeadsign: "Univ District", Predicted: true, PredictedArrivalTime: now.Add(4 * time.Minute).UnixMilli(), NumberOfStopsAway: 5},
+				{RouteShortName: "67", TripHeadsign: "Univ District", Predicted: true, PredictedArrivalTime: now.Add(4*time.Minute + 1*time.Second).UnixMilli(), NumberOfStopsAway: 5},
+				{RouteShortName: "67", TripHeadsign: "Univ District", Predicted: true, PredictedArrivalTime: now.Add(4*time.Minute + 2*time.Second).UnixMilli(), NumberOfStopsAway: 6},
+			},
+			want: 1,
+		},
+		{
+			name: "same route with spread-out times kept",
+			arrivals: []api.Arrival{
+				{RouteShortName: "67", TripHeadsign: "Univ District", Predicted: true, PredictedArrivalTime: now.Add(4 * time.Minute).UnixMilli(), NumberOfStopsAway: 5},
+				{RouteShortName: "67", TripHeadsign: "Univ District", Predicted: true, PredictedArrivalTime: now.Add(20 * time.Minute).UnixMilli(), NumberOfStopsAway: 8},
+			},
+			want: 2,
+		},
+		{
+			name: "different headsigns not collapsed",
+			arrivals: []api.Arrival{
+				{RouteShortName: "67", TripHeadsign: "Univ District", Predicted: true, PredictedArrivalTime: now.Add(4 * time.Minute).UnixMilli()},
+				{RouteShortName: "67", TripHeadsign: "Northgate", Predicted: true, PredictedArrivalTime: now.Add(4*time.Minute + 5*time.Second).UnixMilli()},
+			},
+			want: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := collapseBunchedArrivals(tt.arrivals)
+			if len(got) != tt.want {
+				t.Fatalf("collapseBunchedArrivals returned %d arrivals, want %d", len(got), tt.want)
+			}
+		})
+	}
+}
+
+func TestPrintArrivals_CollapsesBunchedBuses(t *testing.T) {
+	now := time.Now()
+	arrivals := []api.Arrival{
+		{RouteShortName: "67", TripHeadsign: "Univ District", Predicted: true, PredictedArrivalTime: now.Add(4 * time.Minute).UnixMilli(), NumberOfStopsAway: 5},
+		{RouteShortName: "67", TripHeadsign: "Univ District", Predicted: true, PredictedArrivalTime: now.Add(4*time.Minute + 1*time.Second).UnixMilli(), NumberOfStopsAway: 5},
+		{RouteShortName: "67", TripHeadsign: "Univ District", Predicted: true, PredictedArrivalTime: now.Add(4*time.Minute + 2*time.Second).UnixMilli(), NumberOfStopsAway: 4},
+		{RouteShortName: "67", TripHeadsign: "Univ District", Predicted: true, PredictedArrivalTime: now.Add(20 * time.Minute).UnixMilli(), NumberOfStopsAway: 8},
+	}
+
+	output := captureStdout(t, func() {
+		PrintArrivals(arrivals, "1_82235", 5)
+	})
+
+	count := strings.Count(output, "67")
+	if count != 2 {
+		t.Fatalf("expected 2 rows for route 67 (collapsed from 4), got %d\nOutput:\n%s", count, output)
+	}
+}

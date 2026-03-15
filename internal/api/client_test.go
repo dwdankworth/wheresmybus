@@ -27,7 +27,8 @@ func TestGetArrivalsFromURL_Success(t *testing.T) {
           "numberOfStopsAway": 3,
           "predicted": true,
           "routeId": "1_100",
-          "stopId": "1_75403"
+          "stopId": "1_75403",
+          "tripId": "1_TRIP_A"
         },
         {
           "routeShortName": "48",
@@ -37,7 +38,8 @@ func TestGetArrivalsFromURL_Success(t *testing.T) {
           "numberOfStopsAway": 5,
           "predicted": false,
           "routeId": "1_200",
-          "stopId": "1_75403"
+          "stopId": "1_75403",
+          "tripId": "1_TRIP_B"
         }
       ]
     }
@@ -55,11 +57,11 @@ func TestGetArrivalsFromURL_Success(t *testing.T) {
 		t.Fatalf("expected 2 arrivals, got %d", len(arrivals))
 	}
 
-	if arrivals[0].RouteShortName != "44" || arrivals[0].TripHeadsign != "Downtown Seattle" || arrivals[0].PredictedArrivalTime != 1700000000000 || arrivals[0].ScheduledArrivalTime != 1700000060000 || arrivals[0].NumberOfStopsAway != 3 || !arrivals[0].Predicted || arrivals[0].RouteID != "1_100" || arrivals[0].StopID != "1_75403" {
+	if arrivals[0].RouteShortName != "44" || arrivals[0].TripHeadsign != "Downtown Seattle" || arrivals[0].PredictedArrivalTime != 1700000000000 || arrivals[0].ScheduledArrivalTime != 1700000060000 || arrivals[0].NumberOfStopsAway != 3 || !arrivals[0].Predicted || arrivals[0].RouteID != "1_100" || arrivals[0].StopID != "1_75403" || arrivals[0].TripID != "1_TRIP_A" {
 		t.Fatalf("unexpected first arrival: %+v", arrivals[0])
 	}
 
-	if arrivals[1].RouteShortName != "48" || arrivals[1].TripHeadsign != "Mount Baker" || arrivals[1].PredictedArrivalTime != 1700000100000 || arrivals[1].ScheduledArrivalTime != 1700000160000 || arrivals[1].NumberOfStopsAway != 5 || arrivals[1].Predicted || arrivals[1].RouteID != "1_200" || arrivals[1].StopID != "1_75403" {
+	if arrivals[1].RouteShortName != "48" || arrivals[1].TripHeadsign != "Mount Baker" || arrivals[1].PredictedArrivalTime != 1700000100000 || arrivals[1].ScheduledArrivalTime != 1700000160000 || arrivals[1].NumberOfStopsAway != 5 || arrivals[1].Predicted || arrivals[1].RouteID != "1_200" || arrivals[1].StopID != "1_75403" || arrivals[1].TripID != "1_TRIP_B" {
 		t.Fatalf("unexpected second arrival: %+v", arrivals[1])
 	}
 }
@@ -248,4 +250,101 @@ func (errReadCloser) Read(p []byte) (int, error) {
 
 func (errReadCloser) Close() error {
 	return nil
+}
+
+func TestDeduplicateArrivals(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []Arrival
+		want int
+	}{
+		{
+			name: "empty input",
+			in:   nil,
+			want: 0,
+		},
+		{
+			name: "no duplicates",
+			in: []Arrival{
+				{TripID: "A", RouteShortName: "44"},
+				{TripID: "B", RouteShortName: "48"},
+			},
+			want: 2,
+		},
+		{
+			name: "duplicates collapsed",
+			in: []Arrival{
+				{TripID: "A", RouteShortName: "44"},
+				{TripID: "A", RouteShortName: "44"},
+				{TripID: "A", RouteShortName: "44"},
+				{TripID: "B", RouteShortName: "48"},
+			},
+			want: 2,
+		},
+		{
+			name: "empty tripId preserved",
+			in: []Arrival{
+				{TripID: "", RouteShortName: "44"},
+				{TripID: "", RouteShortName: "48"},
+			},
+			want: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := deduplicateArrivals(tt.in)
+			if len(got) != tt.want {
+				t.Fatalf("deduplicateArrivals returned %d arrivals, want %d", len(got), tt.want)
+			}
+		})
+	}
+}
+
+func TestDeduplicateArrivals_KeepsFirst(t *testing.T) {
+	arrivals := []Arrival{
+		{TripID: "A", NumberOfStopsAway: 5},
+		{TripID: "A", NumberOfStopsAway: 3},
+	}
+	got := deduplicateArrivals(arrivals)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 arrival, got %d", len(got))
+	}
+	if got[0].NumberOfStopsAway != 5 {
+		t.Fatalf("expected first occurrence (5 stops away), got %d", got[0].NumberOfStopsAway)
+	}
+}
+
+func TestGetArrivalsFromURL_Deduplicates(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+  "code": 200,
+  "text": "OK",
+  "data": {
+    "entry": {
+      "arrivalsAndDepartures": [
+        {"tripId": "1_T1", "routeShortName": "67", "tripHeadsign": "Univ District", "predictedArrivalTime": 1700000000000, "scheduledArrivalTime": 1700000060000, "numberOfStopsAway": 5, "predicted": true, "routeId": "1_100", "stopId": "1_82235"},
+        {"tripId": "1_T1", "routeShortName": "67", "tripHeadsign": "Univ District", "predictedArrivalTime": 1700000000000, "scheduledArrivalTime": 1700000060000, "numberOfStopsAway": 5, "predicted": true, "routeId": "1_100", "stopId": "1_82235"},
+        {"tripId": "1_T1", "routeShortName": "67", "tripHeadsign": "Univ District", "predictedArrivalTime": 1700000000000, "scheduledArrivalTime": 1700000060000, "numberOfStopsAway": 5, "predicted": true, "routeId": "1_100", "stopId": "1_82235"},
+        {"tripId": "1_T2", "routeShortName": "67", "tripHeadsign": "Univ District", "predictedArrivalTime": 1700000120000, "scheduledArrivalTime": 1700000180000, "numberOfStopsAway": 7, "predicted": true, "routeId": "1_100", "stopId": "1_82235"}
+      ]
+    }
+  }
+}`)
+	}))
+	defer server.Close()
+
+	arrivals, err := GetArrivalsFromURL(server.Client(), server.URL)
+	if err != nil {
+		t.Fatalf("GetArrivalsFromURL returned error: %v", err)
+	}
+
+	if len(arrivals) != 2 {
+		t.Fatalf("expected 2 arrivals after dedup, got %d", len(arrivals))
+	}
+
+	if arrivals[0].TripID != "1_T1" || arrivals[1].TripID != "1_T2" {
+		t.Fatalf("unexpected trip IDs: %s, %s", arrivals[0].TripID, arrivals[1].TripID)
+	}
 }
