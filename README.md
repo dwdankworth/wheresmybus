@@ -15,11 +15,11 @@ The setup script will verify Go is installed, build the CLI, offer to add it to 
 
 ### 1. Get an API key
 
-Sign up at <https://www.pugetsound.onebusaway.org/p/sign-up> to get your OneBusAway API key.
+Sign up at <https://www.soundtransit.org/help-contacts/business-information/open-transit-data-otd/otd-downloads> to get your OneBusAway API key.
 
 ### 2. Find your stop IDs
 
-Search for your home and office bus stops at <https://pugetsound.onebusaway.org/>. The stop ID is shown in the URL (e.g., `1_75403`).
+Search for your home and office bus stops at <https://pugetsound.onebusaway.org/>. The stop ID is shown in the URL (e.g., `1_75403`). You can also find stop numbers on Google Maps. The 1_ prefix indicates a King County Metro Bus, and 40 is Sound Transit.
 
 ### 3. Configure .env
 
@@ -41,8 +41,14 @@ OFFICE_STOP_ID=1_12345
 
 ### 4. Install
 
+Automatic install + PATH + .env config:
+
 ```sh
-go install github.com/dwdan/wheresmybus@latest
+./setup.sh
+```
+
+```sh
+go install github.com/dwdankworth/wheresmybus@latest
 ```
 
 Or build locally:
