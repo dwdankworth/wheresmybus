@@ -23,7 +23,7 @@ jobs:
     name: Test (${{ matrix.os }})
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -37,6 +37,7 @@ jobs:
         with:
           name: coverage-${{ matrix.os }}
           path: coverage.out
+          overwrite: true
 
   build:
     name: Build
@@ -47,5 +48,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Build binary
+      - name: Build binary (Linux)
         run: go build -o wheresmybus .
+      - name: Build binary (Windows)
+        run: GOOS=windows go build -o wheresmybus.exe .
