@@ -28,7 +28,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	stopID, err := resolveStop(cfg, *direction)
+	stopID, err := resolveStop(cfg, *direction, wifi.CurrentSSID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -43,25 +43,25 @@ func main() {
 	display.PrintArrivals(arrivals, stopID, maxResults)
 }
 
-func resolveStop(cfg *config.Config, direction string) (string, error) {
+func resolveStop(cfg *config.Config, direction string, detectSSID func() (string, error)) (string, error) {
 	if direction == "home" {
-		return cfg.HomeStopID, nil
+		return cfg.OfficeStopID, nil // Going home → catch bus at office stop
 	}
 	if direction == "office" {
-		return cfg.OfficeStopID, nil
+		return cfg.HomeStopID, nil // Going to office → catch bus at home stop
 	}
 
 	// Auto-detect from wifi
-	ssid, err := wifi.CurrentSSID()
+	ssid, err := detectSSID()
 	if err != nil {
 		return "", fmt.Errorf("wifi detection failed: %w\nUse --direction home|office instead", err)
 	}
 
 	switch ssid {
 	case cfg.HomeWifi:
-		return cfg.OfficeStopID, nil // At home → heading to office
+		return cfg.HomeStopID, nil // At home → show nearby stop
 	case cfg.OfficeWifi:
-		return cfg.HomeStopID, nil // At office → heading home
+		return cfg.OfficeStopID, nil // At office → show nearby stop
 	default:
 		if ssid == "" {
 			return "", fmt.Errorf("not connected to wifi\nUse: wheresmybus --direction home|office")

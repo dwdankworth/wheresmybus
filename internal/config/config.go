@@ -23,6 +23,11 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("load .env: %w", err)
 	}
 
+	return LoadFromEnv()
+}
+
+// LoadFromEnv reads configuration from environment variables.
+func LoadFromEnv() (*Config, error) {
 	cfg := &Config{
 		APIKey:       os.Getenv("OBA_API_KEY"),
 		HomeWifi:     os.Getenv("HOME_WIFI"),
