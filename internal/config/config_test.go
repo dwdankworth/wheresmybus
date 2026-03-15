@@ -168,9 +168,10 @@ func TestLoad_ConfigDirFallback(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
-	// Override HOME so os.UserConfigDir() resolves to a temp location
+	// Override HOME/APPDATA so os.UserConfigDir() resolves to a temp location
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
+	t.Setenv("APPDATA", filepath.Join(fakeHome, "AppData", "Roaming"))
 
 	cfgDir := ConfigDir()
 	if cfgDir == "" {
@@ -210,6 +211,7 @@ OFFICE_STOP_ID=cwd-office-stop
 	// Config dir .env with different values
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
+	t.Setenv("APPDATA", filepath.Join(fakeHome, "AppData", "Roaming"))
 
 	cfgDir := ConfigDir()
 	if cfgDir == "" {
@@ -267,11 +269,18 @@ func TestLoad_NoEnvFile(t *testing.T) {
 		t.Fatalf("Getwd() error = %v", err)
 	}
 
+	// Use an empty temp dir as CWD (no .env here)
 	tempDir := t.TempDir()
 	if err := os.Chdir(tempDir); err != nil {
 		t.Fatalf("Chdir(%q) error = %v", tempDir, err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	// Override HOME/APPDATA so ConfigDir() resolves to a controlled
+	// empty location, matching the isolation used by other Load tests.
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	t.Setenv("APPDATA", filepath.Join(fakeHome, "AppData", "Roaming"))
 
 	_, err = Load()
 	if err == nil {
