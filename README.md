@@ -54,7 +54,7 @@ Sign up at <https://www.soundtransit.org/help-contacts/business-information/open
 
 ### 2. Find your stop IDs
 
-Search for your home and office bus stops at <https://pugetsound.onebusaway.org/> or Google Maps. Rider-facing tools often show a bare stop code like `71335`, while the OneBusAway API uses a full stop ID like `1_71335`. `wheresmybus` now accepts either format in `HOME_STOP_ID` and `OFFICE_STOP_ID`.
+Search for your home and office bus stops at <https://pugetsound.onebusaway.org/> or Google Maps. Rider-facing tools often show a bare stop code like `71335`, while the OneBusAway API uses a full stop ID like `1_71335`. `wheresmybus` accepts either format in `HOME_STOP_ID` and `OFFICE_STOP_ID`, and resolves bare stop codes through OneBusAway's stop search API.
 
 ### 3. Configure .env
 
@@ -161,7 +161,7 @@ wheresmybus -direction office
 - If Wi-Fi does not resolve and `DEFAULT_LOCATION=office`, it uses `OFFICE_STOP_ID`
 - If none of the above apply, use `-direction`
 
-`-stop` and `-direction` cannot be used together. Bare numeric stop codes are resolved automatically; if a stop code is ambiguous across agencies, use the full stop ID instead.
+`-stop` and `-direction` cannot be used together. Bare numeric stop codes are resolved automatically through OneBusAway stop search; if a stop code is ambiguous across agencies, use the full stop ID instead.
 
 | Platform | Method |
 |---|---|

@@ -103,6 +103,27 @@ func TestGetArrivalsFromURL_HTTPError500(t *testing.T) {
 	}
 }
 
+func TestGetArrivalsFromURL_HTTPError429(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = fmt.Fprint(w, `{"code":429,"text":"rate limit exceeded"}`)
+	}))
+	defer server.Close()
+
+	_, err := GetArrivalsFromURL(server.Client(), server.URL)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "rate limited by OneBusAway") {
+		t.Fatalf("expected rate-limit error, got %q", err.Error())
+	}
+
+	if !strings.Contains(err.Error(), `{"code":429,"text":"rate limit exceeded"}`) {
+		t.Fatalf("expected error to contain response body, got %q", err.Error())
+	}
+}
+
 func TestGetArrivalsFromURL_MalformedJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -218,18 +239,14 @@ func TestGetArrivals_URLConstruction(t *testing.T) {
 }
 
 func TestGetArrivalsForStop_UsesExactStopIDWithoutResolution(t *testing.T) {
-	var agenciesCalled bool
-	var stopLookupCalled bool
+	var searchCalled bool
 	var arrivalsPath string
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/where/agencies-with-coverage.json":
-			agenciesCalled = true
-			t.Fatalf("did not expect agencies-with-coverage lookup for exact stop ID")
-		case "/api/where/stop/1_75403.json":
-			stopLookupCalled = true
-			t.Fatalf("did not expect stop lookup for exact stop ID")
+		case "/api/where/search/stop.json":
+			searchCalled = true
+			t.Fatalf("did not expect stop search lookup for exact stop ID")
 		case "/api/where/arrivals-and-departures-for-stop/1_75403.json":
 			arrivalsPath = r.URL.Path
 			w.Header().Set("Content-Type", "application/json")
@@ -250,11 +267,8 @@ func TestGetArrivalsForStop_UsesExactStopIDWithoutResolution(t *testing.T) {
 	if resolvedStopID != "1_75403" {
 		t.Fatalf("resolved stop ID = %q, want %q", resolvedStopID, "1_75403")
 	}
-	if agenciesCalled {
-		t.Fatal("agencies-with-coverage endpoint was called unexpectedly")
-	}
-	if stopLookupCalled {
-		t.Fatal("stop lookup endpoint was called unexpectedly")
+	if searchCalled {
+		t.Fatal("stop search endpoint was called unexpectedly")
 	}
 	if arrivalsPath != "/api/where/arrivals-and-departures-for-stop/1_75403.json" {
 		t.Fatalf("arrivals path = %q, want exact stop path", arrivalsPath)
@@ -262,26 +276,17 @@ func TestGetArrivalsForStop_UsesExactStopIDWithoutResolution(t *testing.T) {
 }
 
 func TestGetArrivalsForStop_ResolvesBareStopCode(t *testing.T) {
-	var probedStops []string
+	var searchInput string
+	var searchMaxCount string
 	var arrivalsPath string
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/where/agencies-with-coverage.json":
+		case "/api/where/search/stop.json":
+			searchInput = r.URL.Query().Get("input")
+			searchMaxCount = r.URL.Query().Get("maxCount")
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"list":[{"agencyId":"40"},{"agencyId":"1"},{"agencyId":"29"}]}}`)
-		case "/api/where/stop/1_71335.json":
-			probedStops = append(probedStops, "1_71335")
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"id":"1_71335"}}}`)
-		case "/api/where/stop/29_71335.json":
-			probedStops = append(probedStops, "29_71335")
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `null`)
-		case "/api/where/stop/40_71335.json":
-			probedStops = append(probedStops, "40_71335")
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `null`)
+			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"list":[{"code":"71335","id":"1_71335"},{"code":"171335","id":"1_171335"},{"code":"71335","id":"1_71335"}]}}`)
 		case "/api/where/arrivals-and-departures-for-stop/1_71335.json":
 			arrivalsPath = r.URL.Path
 			w.Header().Set("Content-Type", "application/json")
@@ -302,9 +307,11 @@ func TestGetArrivalsForStop_ResolvesBareStopCode(t *testing.T) {
 	if len(arrivals) != 1 {
 		t.Fatalf("expected 1 arrival, got %d", len(arrivals))
 	}
-	wantProbed := []string{"1_71335", "29_71335", "40_71335"}
-	if strings.Join(probedStops, ",") != strings.Join(wantProbed, ",") {
-		t.Fatalf("probed stops = %v, want %v", probedStops, wantProbed)
+	if searchInput != "71335" {
+		t.Fatalf("search input = %q, want %q", searchInput, "71335")
+	}
+	if searchMaxCount != "100" {
+		t.Fatalf("search maxCount = %q, want %q", searchMaxCount, "100")
 	}
 	if arrivalsPath != "/api/where/arrivals-and-departures-for-stop/1_71335.json" {
 		t.Fatalf("arrivals path = %q, want resolved stop path", arrivalsPath)
@@ -316,13 +323,10 @@ func TestGetArrivalsForStop_BareStopCodeNotFound(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/where/agencies-with-coverage.json":
+		case "/api/where/search/stop.json":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"list":[{"agencyId":"1"},{"agencyId":"40"}]}}`)
-		case "/api/where/stop/1_71335.json", "/api/where/stop/40_71335.json":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `null`)
-		case "/api/where/arrivals-and-departures-for-stop/1_71335.json", "/api/where/arrivals-and-departures-for-stop/40_71335.json":
+			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"list":[{"code":"171335","id":"1_171335"}]}}`)
+		case "/api/where/arrivals-and-departures-for-stop/1_171335.json":
 			arrivalsCalled = true
 			t.Fatalf("did not expect arrivals lookup when no stop matched")
 		default:
@@ -348,15 +352,9 @@ func TestGetArrivalsForStop_BareStopCodeAmbiguous(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/where/agencies-with-coverage.json":
+		case "/api/where/search/stop.json":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"list":[{"agencyId":"40"},{"agencyId":"1"}]}}`)
-		case "/api/where/stop/1_71335.json":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"id":"1_71335"}}}`)
-		case "/api/where/stop/40_71335.json":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"id":"40_71335"}}}`)
+			_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"list":[{"code":"71335","id":"40_71335"},{"code":"71335","id":"1_71335"}]}}`)
 		case "/api/where/arrivals-and-departures-for-stop/1_71335.json", "/api/where/arrivals-and-departures-for-stop/40_71335.json":
 			arrivalsCalled = true
 			t.Fatalf("did not expect arrivals lookup when stop code was ambiguous")
@@ -375,6 +373,28 @@ func TestGetArrivalsForStop_BareStopCodeAmbiguous(t *testing.T) {
 	}
 	if arrivalsCalled {
 		t.Fatal("arrivals lookup was called unexpectedly")
+	}
+}
+
+func TestGetArrivalsForStop_BareStopCodeRateLimited(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/where/search/stop.json":
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = fmt.Fprint(w, `{"code":429,"text":"rate limit exceeded"}`)
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	_, _, err := getArrivals(server.Client(), server.URL, "test-api-key", "71335")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "resolve stop code 71335: search stops for code 71335: rate limited by OneBusAway") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

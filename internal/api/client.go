@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -35,23 +34,14 @@ type obaResponse struct {
 	} `json:"data"`
 }
 
-type agenciesWithCoverageResponse struct {
+type stopSearchResponse struct {
 	Code int    `json:"code"`
 	Text string `json:"text"`
 	Data struct {
 		List []struct {
-			AgencyID string `json:"agencyId"`
+			Code string `json:"code"`
+			ID   string `json:"id"`
 		} `json:"list"`
-	} `json:"data"`
-}
-
-type stopResponse struct {
-	Code int    `json:"code"`
-	Text string `json:"text"`
-	Data struct {
-		Entry *struct {
-			ID string `json:"id"`
-		} `json:"entry"`
 	} `json:"data"`
 }
 
@@ -75,17 +65,9 @@ func GetArrivalsFromURL(client *http.Client, requestURL string) ([]Arrival, erro
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("unexpected HTTP status %d and failed to read body: %w", resp.StatusCode, err)
-		}
-		return nil, fmt.Errorf("unexpected HTTP status %d: %s", resp.StatusCode, string(body))
-	}
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := readOKResponseBody(resp)
 	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
+		return nil, err
 	}
 
 	var obaResp obaResponse
@@ -123,21 +105,9 @@ func resolveStopID(client *http.Client, apiBaseURL, apiKey, stopRef string) (str
 		return stopRef, nil
 	}
 
-	agencyIDs, err := agenciesWithCoverage(client, apiBaseURL, apiKey)
+	matches, err := searchStopIDs(client, apiBaseURL, apiKey, stopRef)
 	if err != nil {
 		return "", fmt.Errorf("resolve stop code %s: %w", stopRef, err)
-	}
-
-	matches := make([]string, 0, 1)
-	for _, agencyID := range agencyIDs {
-		candidate := agencyID + "_" + stopRef
-		exists, resolvedStopID, err := stopExists(client, apiBaseURL, apiKey, candidate)
-		if err != nil {
-			return "", fmt.Errorf("resolve stop code %s: %w", stopRef, err)
-		}
-		if exists {
-			matches = append(matches, resolvedStopID)
-		}
 	}
 
 	switch len(matches) {
@@ -151,19 +121,59 @@ func resolveStopID(client *http.Client, apiBaseURL, apiKey, stopRef string) (str
 	}
 }
 
-func agenciesWithCoverage(client *http.Client, apiBaseURL, apiKey string) ([]string, error) {
-	requestURL := fmt.Sprintf("%s/api/where/agencies-with-coverage.json?%s", apiBaseURL, url.Values{"key": []string{apiKey}}.Encode())
+func searchStopIDs(client *http.Client, apiBaseURL, apiKey, stopCode string) ([]string, error) {
+	requestURL := fmt.Sprintf("%s/api/where/search/stop.json?%s", apiBaseURL, url.Values{
+		"input":    []string{stopCode},
+		"key":      []string{apiKey},
+		"maxCount": []string{"100"},
+	}.Encode())
 
 	resp, err := client.Get(requestURL)
 	if err != nil {
-		return nil, fmt.Errorf("get agencies with coverage: %w", err)
+		return nil, fmt.Errorf("search stops for code %s: %w", stopCode, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	body, err := readOKResponseBody(resp)
+	if err != nil {
+		return nil, fmt.Errorf("search stops for code %s: %w", stopCode, err)
+	}
+
+	var searchResp stopSearchResponse
+	if err := json.Unmarshal(body, &searchResp); err != nil {
+		return nil, fmt.Errorf("search stops for code %s: unmarshal response: %w", stopCode, err)
+	}
+
+	if searchResp.Code != http.StatusOK {
+		return nil, fmt.Errorf("search stops for code %s: onebusaway error %d: %s", stopCode, searchResp.Code, searchResp.Text)
+	}
+
+	seen := make(map[string]bool)
+	stopIDs := make([]string, 0, len(searchResp.Data.List))
+	for _, stop := range searchResp.Data.List {
+		if stop.Code != stopCode || stop.ID == "" || seen[stop.ID] {
+			continue
+		}
+		seen[stop.ID] = true
+		stopIDs = append(stopIDs, stop.ID)
+	}
+
+	sort.Strings(stopIDs)
+	return stopIDs, nil
+}
+
+func arrivalsURL(apiBaseURL, apiKey, stopID string) string {
+	return fmt.Sprintf("%s/api/where/arrivals-and-departures-for-stop/%s.json?%s", apiBaseURL, url.PathEscape(stopID), url.Values{"key": []string{apiKey}}.Encode())
+}
+
+func readOKResponseBody(resp *http.Response) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("unexpected HTTP status %d and failed to read body: %w", resp.StatusCode, err)
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			return nil, fmt.Errorf("rate limited by OneBusAway (HTTP 429): %s", string(body))
 		}
 		return nil, fmt.Errorf("unexpected HTTP status %d: %s", resp.StatusCode, string(body))
 	}
@@ -173,77 +183,7 @@ func agenciesWithCoverage(client *http.Client, apiBaseURL, apiKey string) ([]str
 		return nil, fmt.Errorf("read response body: %w", err)
 	}
 
-	var coverageResp agenciesWithCoverageResponse
-	if err := json.Unmarshal(body, &coverageResp); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
-	}
-
-	if coverageResp.Code != http.StatusOK {
-		return nil, fmt.Errorf("onebusaway error %d: %s", coverageResp.Code, coverageResp.Text)
-	}
-
-	seen := make(map[string]bool)
-	agencyIDs := make([]string, 0, len(coverageResp.Data.List))
-	for _, coverage := range coverageResp.Data.List {
-		if coverage.AgencyID == "" || seen[coverage.AgencyID] {
-			continue
-		}
-		seen[coverage.AgencyID] = true
-		agencyIDs = append(agencyIDs, coverage.AgencyID)
-	}
-
-	sort.Strings(agencyIDs)
-	if len(agencyIDs) == 0 {
-		return nil, fmt.Errorf("no agencies with coverage returned")
-	}
-
-	return agencyIDs, nil
-}
-
-func stopExists(client *http.Client, apiBaseURL, apiKey, stopID string) (bool, string, error) {
-	requestURL := fmt.Sprintf("%s/api/where/stop/%s.json?%s", apiBaseURL, url.PathEscape(stopID), url.Values{"key": []string{apiKey}}.Encode())
-
-	resp, err := client.Get(requestURL)
-	if err != nil {
-		return false, "", fmt.Errorf("get stop %s: %w", stopID, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return false, "", fmt.Errorf("check stop %s: unexpected HTTP status %d and failed to read body: %w", stopID, resp.StatusCode, err)
-		}
-		return false, "", fmt.Errorf("check stop %s: unexpected HTTP status %d: %s", stopID, resp.StatusCode, string(body))
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false, "", fmt.Errorf("check stop %s: read response body: %w", stopID, err)
-	}
-
-	if bytes.Equal(bytes.TrimSpace(body), []byte("null")) {
-		return false, "", nil
-	}
-
-	var stopResp stopResponse
-	if err := json.Unmarshal(body, &stopResp); err != nil {
-		return false, "", fmt.Errorf("check stop %s: unmarshal response: %w", stopID, err)
-	}
-
-	if stopResp.Code != http.StatusOK {
-		return false, "", fmt.Errorf("check stop %s: onebusaway error %d: %s", stopID, stopResp.Code, stopResp.Text)
-	}
-
-	if stopResp.Data.Entry == nil || stopResp.Data.Entry.ID == "" {
-		return false, "", nil
-	}
-
-	return true, stopResp.Data.Entry.ID, nil
-}
-
-func arrivalsURL(apiBaseURL, apiKey, stopID string) string {
-	return fmt.Sprintf("%s/api/where/arrivals-and-departures-for-stop/%s.json?%s", apiBaseURL, url.PathEscape(stopID), url.Values{"key": []string{apiKey}}.Encode())
+	return body, nil
 }
 
 func isBareStopCode(stopRef string) bool {
