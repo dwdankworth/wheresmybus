@@ -33,7 +33,7 @@ func TestResolveStop(t *testing.T) {
 			detectSSID: func() (string, error) {
 				return "HomeNet", nil
 			},
-			wantStop:         "1_HOME",
+			wantStop:         "1_OFFICE",
 			wantDetectCalled: false,
 		},
 		{
@@ -42,7 +42,7 @@ func TestResolveStop(t *testing.T) {
 			detectSSID: func() (string, error) {
 				return "OfficeNet", nil
 			},
-			wantStop:         "1_OFFICE",
+			wantStop:         "1_HOME",
 			wantDetectCalled: false,
 		},
 		{
@@ -51,7 +51,7 @@ func TestResolveStop(t *testing.T) {
 			detectSSID: func() (string, error) {
 				return "HomeNet", nil
 			},
-			wantStop:         "1_OFFICE",
+			wantStop:         "1_HOME",
 			wantDetectCalled: true,
 		},
 		{
@@ -60,7 +60,7 @@ func TestResolveStop(t *testing.T) {
 			detectSSID: func() (string, error) {
 				return "OfficeNet", nil
 			},
-			wantStop:         "1_HOME",
+			wantStop:         "1_OFFICE",
 			wantDetectCalled: true,
 		},
 		{

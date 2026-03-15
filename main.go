@@ -45,10 +45,10 @@ func main() {
 
 func resolveStop(cfg *config.Config, direction string, detectSSID func() (string, error)) (string, error) {
 	if direction == "home" {
-		return cfg.HomeStopID, nil
+		return cfg.OfficeStopID, nil // Going home → catch bus at office stop
 	}
 	if direction == "office" {
-		return cfg.OfficeStopID, nil
+		return cfg.HomeStopID, nil // Going to office → catch bus at home stop
 	}
 
 	// Auto-detect from wifi
@@ -59,9 +59,9 @@ func resolveStop(cfg *config.Config, direction string, detectSSID func() (string
 
 	switch ssid {
 	case cfg.HomeWifi:
-		return cfg.OfficeStopID, nil // At home → heading to office
+		return cfg.HomeStopID, nil // At home → show nearby stop
 	case cfg.OfficeWifi:
-		return cfg.HomeStopID, nil // At office → heading home
+		return cfg.OfficeStopID, nil // At office → show nearby stop
 	default:
 		if ssid == "" {
 			return "", fmt.Errorf("not connected to wifi\nUse: wheresmybus --direction home|office")
