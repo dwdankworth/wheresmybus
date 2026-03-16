@@ -1,4 +1,6 @@
 .env
 coverage.out
 dist/
-wheresmybus
+*.exe
+*.tar.gz
+*.zip
