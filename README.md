@@ -219,6 +219,10 @@ go build -o wheresmybus .
 # Use Wi-Fi auto-detection, then fall back to DEFAULT_LOCATION if set
 wheresmybus
 
+# Show more or fewer arrivals
+wheresmybus -max-results 15
+wheresmybus -max-results 0
+
 # Look up any stop directly by stop code or full stop ID
 wheresmybus -stop 12345
 wheresmybus -stop 1_75403
@@ -230,6 +234,8 @@ wheresmybus -direction office
 # Print the binary version
 wheresmybus -version
 ```
+
+By default, `wheresmybus` shows up to 10 arrivals. Use `-max-results <n>` to change that, or `-max-results 0` to show all arrivals after sorting and bunch-collapse deduplication.
 
 ### How stop resolution works
 

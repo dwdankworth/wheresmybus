@@ -192,35 +192,49 @@ func TestResolveStop(t *testing.T) {
 
 func TestValidateFlags(t *testing.T) {
 	tests := []struct {
-		name      string
-		stop      string
-		direction string
-		wantErr   string
+		name       string
+		stop       string
+		direction  string
+		maxResults int
+		wantErr    string
 	}{
 		{
-			name:      "stop and direction conflict",
-			stop:      "12345",
-			direction: "home",
-			wantErr:   "-stop and -direction cannot be used together",
+			name:       "stop and direction conflict",
+			stop:       "12345",
+			direction:  "home",
+			maxResults: 10,
+			wantErr:    "-stop and -direction cannot be used together",
 		},
 		{
-			name:      "invalid direction",
-			direction: "elsewhere",
-			wantErr:   "-direction must be 'home' or 'office'",
+			name:       "invalid direction",
+			direction:  "elsewhere",
+			maxResults: 10,
+			wantErr:    "-direction must be 'home' or 'office'",
 		},
 		{
-			name: "stop only is valid",
-			stop: "12345",
+			name:       "stop only is valid",
+			stop:       "12345",
+			maxResults: 10,
 		},
 		{
-			name:      "direction only is valid",
-			direction: "office",
+			name:       "direction only is valid",
+			direction:  "office",
+			maxResults: 10,
+		},
+		{
+			name:       "zero max results is valid",
+			maxResults: 0,
+		},
+		{
+			name:       "negative max results is invalid",
+			maxResults: -1,
+			wantErr:    "-max-results must be 0 or greater",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateFlags(tt.stop, tt.direction)
+			err := validateFlags(tt.stop, tt.direction, tt.maxResults)
 			if tt.wantErr == "" {
 				if err != nil {
 					t.Fatalf("validateFlags returned unexpected error: %v", err)

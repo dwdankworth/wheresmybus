@@ -11,13 +11,14 @@ import (
 	"github.com/dwdankworth/wheresmybus/internal/wifi"
 )
 
-const maxResults = 5
+const defaultMaxResults = 10
 
 var version = "dev"
 
 func main() {
 	stop := flag.String("stop", "", "Query an explicit stop code or full stop ID")
 	direction := flag.String("direction", "", "Which stop to query: 'home' or 'office'")
+	maxResults := flag.Int("max-results", defaultMaxResults, "Maximum number of arrivals to show (0 for all)")
 	printVersion := flag.Bool("version", false, "Print the version and exit")
 	printConfigDir := flag.Bool("print-config-dir", false, "Print the platform-specific config directory and exit")
 	flag.Parse()
@@ -37,7 +38,7 @@ func main() {
 		return
 	}
 
-	if err := validateFlags(*stop, *direction); err != nil {
+	if err := validateFlags(*stop, *direction, *maxResults); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -60,7 +61,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	display.PrintArrivals(arrivals, resolvedStopID, maxResults)
+	display.PrintArrivals(arrivals, resolvedStopID, *maxResults)
 }
 
 func versionString() string {
@@ -71,12 +72,15 @@ func versionString() string {
 	return fmt.Sprintf("wheresmybus version %s", v)
 }
 
-func validateFlags(stop, direction string) error {
+func validateFlags(stop, direction string, maxResults int) error {
 	if stop != "" && direction != "" {
 		return fmt.Errorf("-stop and -direction cannot be used together")
 	}
 	if direction != "" && direction != "home" && direction != "office" {
 		return fmt.Errorf("-direction must be 'home' or 'office'")
+	}
+	if maxResults < 0 {
+		return fmt.Errorf("-max-results must be 0 or greater")
 	}
 	return nil
 }
