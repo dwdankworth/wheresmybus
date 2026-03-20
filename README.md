@@ -5,7 +5,7 @@ Uses the [OneBusAway](https://pugetsound.onebusaway.org/) API for King County Me
 
 ## Quick Start
 
-Want a ready-to-run binary without installing Go? Download the archive for your platform from [GitHub Releases](https://github.com/dwdankworth/wheresmybus/releases), extract it, put the binary on your `PATH`, and follow the configuration steps below.
+Want the simplest option without installing Go? Download the release archive for your platform from [GitHub Releases](https://github.com/dwdankworth/wheresmybus/releases), extract it, and then follow the **Install a downloaded release** steps below. That section shows the exact folder to use on Linux, macOS, and Windows.
 
 You can verify the installed binary with:
 
@@ -102,35 +102,71 @@ DEFAULT_LOCATION=home
 
 ### 4. Install
 
-Download a release binary (no Go required):
+#### Install a downloaded release (no Go required)
+
+If you are new to the command line, "`PATH`" just means "a folder your terminal checks when you type a command." The easiest approach is to copy `wheresmybus` into a common command folder for your OS.
 
 1. Open <https://github.com/dwdankworth/wheresmybus/releases>
-2. Download the archive matching your OS and CPU architecture
-3. Extract it and copy the binary somewhere on your `PATH`
-4. Run `wheresmybus --print-config-dir` to find the config directory for your machine
-5. Copy `.env.example` from the release archive into that directory as `.env`, then fill in your values
+2. Download the archive that matches your operating system and extract it
+3. In the extracted folder, you should see:
+   - `wheresmybus` on Linux and macOS, or `wheresmybus.exe` on Windows
+   - `.env.example`
+4. Copy the program into one of these common command folders:
 
-Common install locations:
+**Linux**
 
 ```sh
-# Linux
-install -Dm755 wheresmybus ~/.local/bin/wheresmybus
-
-# macOS
-install -m 755 wheresmybus /usr/local/bin/wheresmybus
+mkdir -p ~/.local/bin
+cp ./wheresmybus ~/.local/bin/wheresmybus
+chmod +x ~/.local/bin/wheresmybus
 ```
 
+**macOS**
+
+```sh
+sudo mkdir -p /usr/local/bin
+sudo cp ./wheresmybus /usr/local/bin/wheresmybus
+sudo chmod +x /usr/local/bin/wheresmybus
+```
+
+**Windows (PowerShell)**
+
 ```powershell
-# Windows (PowerShell)
 New-Item -ItemType Directory -Force -Path "$env:LOCALAPPDATA\wheresmybus" | Out-Null
 Copy-Item .\wheresmybus.exe "$env:LOCALAPPDATA\wheresmybus\wheresmybus.exe" -Force
 ```
 
-Then add the chosen directory to your `PATH` if needed and run:
+5. Copy `.env.example` into the config folder for your OS and rename it to `.env`:
+
+**Linux**
+
+```sh
+mkdir -p ~/.config/wheresmybus
+cp ./.env.example ~/.config/wheresmybus/.env
+```
+
+**macOS**
+
+```sh
+mkdir -p ~/Library/Application\ Support/wheresmybus
+cp ./.env.example ~/Library/Application\ Support/wheresmybus/.env
+```
+
+**Windows (PowerShell)**
+
+```powershell
+New-Item -ItemType Directory -Force -Path "$env:AppData\wheresmybus" | Out-Null
+Copy-Item .\.env.example "$env:AppData\wheresmybus\.env" -Force
+```
+
+6. Edit that `.env` file and fill in your values
+7. Open a new terminal window and run:
 
 ```sh
 wheresmybus -version
 ```
+
+If that command is still not found, the folder from step 4 is not on your `PATH` yet. In that case, either add that folder to your `PATH` or run the setup script instead, which can offer to do the `PATH` step for you automatically.
 
 Source install:
 
