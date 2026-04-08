@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"text/tabwriter"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/dwdankworth/wheresmybus/internal/api"
 )
@@ -30,19 +31,20 @@ func PrintArrivals(arrivals []api.Arrival, stopID string, maxResults int) {
 	fmt.Printf("Arrivals for stop %s:\n", stopID)
 	fmt.Printf("\n")
 
-	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintf(writer, "%-8s\t%-30s\t%-18s\t%s\n", "ROUTE", "DESTINATION", "ETA", "STATUS")
+	rows := [][]string{
+		{"ROUTE", "DESTINATION", "ETA", "STATUS"},
+	}
 
 	for _, arrival := range sorted {
-		_, _ = fmt.Fprintf(writer, "%-8s\t%-30s\t%-18s\t%s\n",
+		rows = append(rows, []string{
 			arrival.RouteShortName,
 			truncate(arrival.TripHeadsign, 30),
 			formatETA(arrival),
 			formatStatus(arrival),
-		)
+		})
 	}
 
-	_ = writer.Flush()
+	printTable(os.Stdout, rows)
 }
 
 func effectiveArrivalTime(arrival api.Arrival) int64 {
@@ -86,6 +88,51 @@ func truncate(value string, max int) string {
 	}
 
 	return string(runes[:max])
+}
+
+func printTable(output *os.File, rows [][]string) {
+	if len(rows) == 0 {
+		return
+	}
+
+	widths := make([]int, len(rows[0]))
+	for _, row := range rows {
+		for i, cell := range row {
+			widths[i] = max(widths[i], utf8.RuneCountInString(cell))
+		}
+	}
+
+	border := tableBorder(widths)
+	_, _ = fmt.Fprintln(output, border)
+	for index, row := range rows {
+		_, _ = fmt.Fprintln(output, tableRow(widths, row))
+		if index == 0 {
+			_, _ = fmt.Fprintln(output, border)
+		}
+	}
+	_, _ = fmt.Fprintln(output, border)
+}
+
+func tableBorder(widths []int) string {
+	var builder strings.Builder
+	builder.WriteByte('+')
+	for _, width := range widths {
+		builder.WriteString(strings.Repeat("-", width+2))
+		builder.WriteByte('+')
+	}
+	return builder.String()
+}
+
+func tableRow(widths []int, row []string) string {
+	var builder strings.Builder
+	builder.WriteByte('|')
+	for index, cell := range row {
+		builder.WriteByte(' ')
+		builder.WriteString(cell)
+		builder.WriteString(strings.Repeat(" ", widths[index]-utf8.RuneCountInString(cell)+1))
+		builder.WriteByte('|')
+	}
+	return builder.String()
 }
 
 const bunchThresholdMs = 60_000 // 60 seconds
