@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -378,6 +377,18 @@ func TestMain_PrintsVersionWithoutLoadingConfig(t *testing.T) {
 func TestMain_PrintsConfigDirWithoutLoadingConfig(t *testing.T) {
 	configHome := t.TempDir()
 
+	// Set the same env vars we pass to the subprocess so config.ConfigDir()
+	// returns the platform-correct expected path (e.g. on macOS it uses
+	// $HOME/Library/Application Support, not XDG_CONFIG_HOME).
+	t.Setenv("HOME", configHome)
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("APPDATA", configHome)
+
+	want := config.ConfigDir()
+	if want == "" {
+		t.Fatal("config.ConfigDir() returned empty string")
+	}
+
 	output, exitCode := runMain(t, map[string]string{
 		"HOME":            configHome,
 		"XDG_CONFIG_HOME": configHome,
@@ -387,7 +398,6 @@ func TestMain_PrintsConfigDirWithoutLoadingConfig(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exit code = %d, want 0 with output %q", exitCode, output)
 	}
-	want := filepath.Join(configHome, "wheresmybus")
 	if strings.TrimSpace(output) != want {
 		t.Fatalf("output = %q, want config dir %q", output, want)
 	}
