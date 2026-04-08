@@ -345,6 +345,7 @@ OFFICE_STOP_ID=cwd-office-stop
 	}
 }
 
+// Verifies that environment variables already set in the shell are not overwritten by .env values.
 // Mutation detected: remove the LookupEnv guard in loadEnvFile so values from .env overwrite explicit environment variables supplied by the user.
 func TestLoad_CWDEnvFilePreservesExistingEnvironment(t *testing.T) {
 	clearEnvVars(t)

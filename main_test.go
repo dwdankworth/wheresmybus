@@ -358,6 +358,7 @@ func runMain(t *testing.T, env map[string]string, args ...string) (string, int) 
 	return string(output), exitCode
 }
 
+// Verifies that -version prints the version string and exits before config loading.
 // Mutation detected: remove the early return in the -version branch so main tries to load config and exits with an error.
 func TestMain_PrintsVersionWithoutLoadingConfig(t *testing.T) {
 	output, exitCode := runMain(t, map[string]string{
@@ -372,6 +373,7 @@ func TestMain_PrintsVersionWithoutLoadingConfig(t *testing.T) {
 	}
 }
 
+// Verifies that -print-config-dir prints the platform config directory and exits before config loading.
 // Mutation detected: delete the -print-config-dir branch so the CLI falls through to config loading instead of printing the platform config directory.
 func TestMain_PrintsConfigDirWithoutLoadingConfig(t *testing.T) {
 	configHome := t.TempDir()
@@ -391,6 +393,7 @@ func TestMain_PrintsConfigDirWithoutLoadingConfig(t *testing.T) {
 	}
 }
 
+// Verifies that configuration load failures print setup guidance and exit non-zero.
 // Mutation detected: remove the config.Load error handling block so startup failures lose the setup guidance or exit successfully.
 func TestMain_LoadFailurePrintsSetupGuidance(t *testing.T) {
 	emptyHome := t.TempDir()
@@ -417,6 +420,7 @@ func TestMain_LoadFailurePrintsSetupGuidance(t *testing.T) {
 	}
 }
 
+// Verifies that an explicit stop fetches arrivals and prints the table without wifi detection.
 // Mutation detected: delete the explicit-stop fast path or the display call so the CLI either tries wifi detection or fails to render the fetched arrival.
 func TestMain_WithExplicitStopPrintsArrivalsTable(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

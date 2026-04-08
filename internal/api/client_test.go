@@ -66,6 +66,7 @@ func TestGetArrivalsFromURL_Success(t *testing.T) {
 	}
 }
 
+// Verifies that GetArrivalsFromURL falls back to http.DefaultClient when client is nil.
 // Mutation detected: delete the nil-client fallback so calling GetArrivalsFromURL(nil, ...) dereferences a nil client instead of using http.DefaultClient.
 func TestGetArrivalsFromURL_NilClientUsesDefaultClient(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -384,6 +385,7 @@ func TestGetArrivalsFromURL_ReadBodyError(t *testing.T) {
 	}
 }
 
+// Verifies that transport failures are wrapped with context about the get-arrivals operation.
 // Mutation detected: drop the client.Get error check so transport failures are ignored or returned without the "get arrivals" context.
 func TestGetArrivalsFromURL_TransportError(t *testing.T) {
 	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -399,6 +401,7 @@ func TestGetArrivalsFromURL_TransportError(t *testing.T) {
 	}
 }
 
+// Verifies that unreadable HTTP error bodies report both the status code and the read failure.
 // Mutation detected: remove the non-200 body-read failure branch so a 500 response with an unreadable body loses the read error context.
 func TestGetArrivalsFromURL_HTTPErrorBodyReadFailure(t *testing.T) {
 	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
