@@ -95,7 +95,18 @@ func printTable(output *os.File, rows [][]string) {
 		return
 	}
 
-	widths := make([]int, len(rows[0]))
+	columnCount := len(rows[0])
+	if columnCount == 0 {
+		return
+	}
+
+	for _, row := range rows {
+		if len(row) != columnCount {
+			return
+		}
+	}
+
+	widths := make([]int, columnCount)
 	for _, row := range rows {
 		for i, cell := range row {
 			widths[i] = max(widths[i], utf8.RuneCountInString(cell))
