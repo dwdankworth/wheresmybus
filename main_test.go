@@ -2,6 +2,13 @@ package main
 
 import (
 	"errors"
+	"flag"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -278,5 +285,164 @@ func TestVersionOutput(t *testing.T) {
 				t.Fatalf("version output = %q, want %q", got, want)
 			}
 		})
+	}
+}
+
+type rewriteTransport struct {
+	base   http.RoundTripper
+	target *url.URL
+}
+
+func (t rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
+	clone.URL.Scheme = t.target.Scheme
+	clone.URL.Host = t.target.Host
+	clone.Host = t.target.Host
+	return t.base.RoundTrip(clone)
+}
+
+func TestMainHelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
+		return
+	}
+
+	if testVersion := os.Getenv("GO_WANT_TEST_VERSION"); testVersion != "" {
+		version = testVersion
+	}
+
+	if target := os.Getenv("GO_WANT_REWRITE_URL"); target != "" {
+		targetURL, err := url.Parse(target)
+		if err != nil {
+			panic(err)
+		}
+
+		http.DefaultClient = &http.Client{
+			Transport: rewriteTransport{base: http.DefaultTransport, target: targetURL},
+		}
+	}
+
+	args := []string{"wheresmybus"}
+	for i, arg := range os.Args {
+		if arg == "--" {
+			args = append(args, os.Args[i+1:]...)
+			break
+		}
+	}
+
+	os.Args = args
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	main()
+	os.Exit(0)
+}
+
+func runMain(t *testing.T, env map[string]string, args ...string) (string, int) {
+	t.Helper()
+
+	cmdArgs := append([]string{"-test.run=TestMainHelperProcess", "--"}, args...)
+	cmd := exec.Command(os.Args[0], cmdArgs...)
+	cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+	for key, value := range env {
+		cmd.Env = append(cmd.Env, key+"="+value)
+	}
+
+	output, err := cmd.CombinedOutput()
+	exitCode := 0
+	if err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
+			t.Fatalf("run main subprocess: %v", err)
+		}
+		exitCode = exitErr.ExitCode()
+	}
+
+	return string(output), exitCode
+}
+
+// Mutation detected: remove the early return in the -version branch so main tries to load config and exits with an error.
+func TestMain_PrintsVersionWithoutLoadingConfig(t *testing.T) {
+	output, exitCode := runMain(t, map[string]string{
+		"GO_WANT_TEST_VERSION": "v9.9.9",
+	}, "-version")
+
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, want 0 with output %q", exitCode, output)
+	}
+	if strings.TrimSpace(output) != "wheresmybus version v9.9.9" {
+		t.Fatalf("output = %q, want version string", output)
+	}
+}
+
+// Mutation detected: delete the -print-config-dir branch so the CLI falls through to config loading instead of printing the platform config directory.
+func TestMain_PrintsConfigDirWithoutLoadingConfig(t *testing.T) {
+	configHome := t.TempDir()
+
+	output, exitCode := runMain(t, map[string]string{
+		"HOME":            configHome,
+		"XDG_CONFIG_HOME": configHome,
+		"APPDATA":         configHome,
+	}, "-print-config-dir")
+
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, want 0 with output %q", exitCode, output)
+	}
+	want := filepath.Join(configHome, "wheresmybus")
+	if strings.TrimSpace(output) != want {
+		t.Fatalf("output = %q, want config dir %q", output, want)
+	}
+}
+
+// Mutation detected: remove the config.Load error handling block so startup failures lose the setup guidance or exit successfully.
+func TestMain_LoadFailurePrintsSetupGuidance(t *testing.T) {
+	emptyHome := t.TempDir()
+	workingDir := t.TempDir()
+
+	output, exitCode := runMain(t, map[string]string{
+		"HOME":             emptyHome,
+		"XDG_CONFIG_HOME":  emptyHome,
+		"APPDATA":          emptyHome,
+		"PWD":              workingDir,
+		"OBA_API_KEY":      "",
+		"HOME_WIFI":        "",
+		"OFFICE_WIFI":      "",
+		"HOME_STOP_ID":     "",
+		"OFFICE_STOP_ID":   "",
+		"DEFAULT_LOCATION": "",
+	}, "-stop", "75403")
+
+	if exitCode == 0 {
+		t.Fatalf("exit code = %d, want non-zero with output %q", exitCode, output)
+	}
+	if !strings.Contains(output, "Run the setup script or copy .env.example to the config directory.") {
+		t.Fatalf("output = %q, want setup guidance", output)
+	}
+}
+
+// Mutation detected: delete the explicit-stop fast path or the display call so the CLI either tries wifi detection or fails to render the fetched arrival.
+func TestMain_WithExplicitStopPrintsArrivalsTable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/where/arrivals-and-departures-for-stop/1_75403.json" {
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"code":200,"text":"OK","data":{"entry":{"arrivalsAndDepartures":[{"routeShortName":"8","tripHeadsign":"Seattle Center","predictedArrivalTime":4102445100000,"scheduledArrivalTime":4102445160000,"numberOfStopsAway":2,"predicted":true,"routeId":"1_100236","stopId":"1_75403","tripId":"1_567890"}]}}}`))
+	}))
+	defer server.Close()
+
+	output, exitCode := runMain(t, map[string]string{
+		"GO_WANT_REWRITE_URL": server.URL,
+		"OBA_API_KEY":         "integration-key",
+		"HOME_WIFI":           "Wallingford-Loft",
+		"OFFICE_WIFI":         "Fremont-Hub",
+		"HOME_STOP_ID":        "1_75403",
+		"OFFICE_STOP_ID":      "1_75548",
+	}, "-stop", "75403", "-max-results", "1")
+
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, want 0 with output %q", exitCode, output)
+	}
+	if !strings.Contains(output, "Arrivals for stop 1_75403:") {
+		t.Fatalf("output = %q, want resolved stop header", output)
+	}
+	if !strings.Contains(output, "Seattle Center") || !strings.Contains(output, "2 stops away") {
+		t.Fatalf("output = %q, want fetched arrival row", output)
 	}
 }
