@@ -66,6 +66,30 @@ func TestGetArrivalsFromURL_Success(t *testing.T) {
 	}
 }
 
+// Verifies that GetArrivalsFromURL falls back to http.DefaultClient when client is nil.
+// Mutation detected: delete the nil-client fallback so calling GetArrivalsFromURL(nil, ...) dereferences a nil client instead of using http.DefaultClient.
+func TestGetArrivalsFromURL_NilClientUsesDefaultClient(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"code":200,"text":"OK","data":{"entry":{"arrivalsAndDepartures":[{"routeShortName":"40","tripHeadsign":"Ballard","predictedArrivalTime":1700000000000,"scheduledArrivalTime":1700000060000,"numberOfStopsAway":2,"predicted":true,"routeId":"1_100","stopId":"1_75403","tripId":"1_TRIP_A"}]}}}`)
+	}))
+	defer server.Close()
+
+	originalClient := http.DefaultClient
+	http.DefaultClient = server.Client()
+	t.Cleanup(func() {
+		http.DefaultClient = originalClient
+	})
+
+	arrivals, err := GetArrivalsFromURL(nil, server.URL)
+	if err != nil {
+		t.Fatalf("GetArrivalsFromURL returned error: %v", err)
+	}
+	if len(arrivals) != 1 || arrivals[0].RouteShortName != "40" {
+		t.Fatalf("arrivals = %+v, want single Ballard trip", arrivals)
+	}
+}
+
 func TestGetArrivalsFromURL_HTTPError404(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"code":404,"text":"resource not found"}`, http.StatusNotFound)
@@ -358,6 +382,42 @@ func TestGetArrivalsFromURL_ReadBodyError(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "read response body") {
 		t.Fatalf("expected read body error, got %q", err.Error())
+	}
+}
+
+// Verifies that transport failures are wrapped with context about the get-arrivals operation.
+// Mutation detected: drop the client.Get error check so transport failures are ignored or returned without the "get arrivals" context.
+func TestGetArrivalsFromURL_TransportError(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return nil, fmt.Errorf("dial tcp 127.0.0.1:443: connect: connection refused")
+	})}
+
+	_, err := GetArrivalsFromURL(client, "https://api.pugetsound.onebusaway.org/fail")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "get arrivals") || !strings.Contains(err.Error(), "connection refused") {
+		t.Fatalf("error = %q, want wrapped transport failure", err.Error())
+	}
+}
+
+// Verifies that unreadable HTTP error bodies report both the status code and the read failure.
+// Mutation detected: remove the non-200 body-read failure branch so a 500 response with an unreadable body loses the read error context.
+func TestGetArrivalsFromURL_HTTPErrorBodyReadFailure(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errReadCloser{},
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	_, err := GetArrivalsFromURL(client, "http://example.com")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unexpected HTTP status 500 and failed to read body") {
+		t.Fatalf("error = %q, want unreadable HTTP error body message", err.Error())
 	}
 }
 

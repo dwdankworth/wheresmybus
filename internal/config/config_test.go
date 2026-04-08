@@ -345,6 +345,37 @@ OFFICE_STOP_ID=cwd-office-stop
 	}
 }
 
+// Verifies that environment variables already set in the shell are not overwritten by .env values.
+// Mutation detected: remove the LookupEnv guard in loadEnvFile so values from .env overwrite explicit environment variables supplied by the user.
+func TestLoad_CWDEnvFilePreservesExistingEnvironment(t *testing.T) {
+	clearEnvVars(t)
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd(): %v", err)
+	}
+
+	cwdDir := t.TempDir()
+	writeEnvFile(t, cwdDir)
+	if err := os.Chdir(cwdDir); err != nil {
+		t.Fatalf("Chdir(%q): %v", cwdDir, err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	t.Setenv("OBA_API_KEY", "shell-exported-key")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.APIKey != "shell-exported-key" {
+		t.Fatalf("APIKey = %q, want %q from existing environment", cfg.APIKey, "shell-exported-key")
+	}
+	if cfg.HomeStopID != "file-home-stop" {
+		t.Fatalf("HomeStopID = %q, want %q from env file", cfg.HomeStopID, "file-home-stop")
+	}
+}
+
 func TestLoad_EnvVarsWithoutFile(t *testing.T) {
 	cwd, err := os.Getwd()
 	if err != nil {
