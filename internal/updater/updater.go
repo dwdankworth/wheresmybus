@@ -98,6 +98,21 @@ func CheckFromURL(client *http.Client, apiURL, currentVersion string) (*CheckRes
 // Apply downloads the release archive from assetURL, extracts the binary,
 // and replaces the currently running executable.
 func Apply(client *http.Client, assetURL, assetName string) error {
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("determine executable path: %w", err)
+	}
+	execPath, err = filepath.EvalSymlinks(execPath)
+	if err != nil {
+		return fmt.Errorf("resolve executable path: %w", err)
+	}
+
+	return applyToPath(client, assetURL, assetName, execPath)
+}
+
+// applyToPath downloads the release archive, extracts the binary, and
+// replaces the file at execPath. Separated from Apply for testability.
+func applyToPath(client *http.Client, assetURL, assetName, execPath string) error {
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -130,15 +145,6 @@ func Apply(client *http.Client, assetURL, assetName string) error {
 	}
 	if err != nil {
 		return fmt.Errorf("extract binary: %w", err)
-	}
-
-	execPath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("determine executable path: %w", err)
-	}
-	execPath, err = filepath.EvalSymlinks(execPath)
-	if err != nil {
-		return fmt.Errorf("resolve executable path: %w", err)
 	}
 
 	return replaceBinary(execPath, binaryData)
