@@ -223,8 +223,11 @@ func TestPrintArrivals(t *testing.T) {
 			maxResults: 0,
 			assertions: func(t *testing.T, output string) {
 				t.Helper()
-				if !strings.Contains(output, "ROUTE") {
-					t.Fatalf("expected ROUTE header, got %q", output)
+				if !strings.Contains(output, "| ROUTE  | DESTINATION | ETA               | STATUS       |") {
+					t.Fatalf("expected table header, got %q", output)
+				}
+				if !strings.Contains(output, "+--------+") {
+					t.Fatalf("expected table border, got %q", output)
 				}
 				assertInOrder(t, output, "EARLY", "MIDDLE", "LATE")
 			},
