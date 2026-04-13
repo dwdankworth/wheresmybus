@@ -13,6 +13,12 @@ You can verify the installed binary with:
 wheresmybus -version
 ```
 
+To update to the latest release at any time:
+
+```sh
+wheresmybus -update
+```
+
 If you'd rather build from source, use the setup scripts:
 
 **Linux / macOS / WSL:**
@@ -230,6 +236,9 @@ wheresmybus -stop 1_75403
 # Explicitly pick a direction
 wheresmybus -direction home
 wheresmybus -direction office
+
+# Update to the latest release
+wheresmybus -update
 
 # Print the binary version
 wheresmybus -version
