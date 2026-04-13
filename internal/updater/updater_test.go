@@ -322,8 +322,11 @@ func TestReplaceBinary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o755 {
-		t.Fatalf("permissions = %o, want 755", info.Mode().Perm())
+	// Windows doesn't support Unix permission bits; skip this check there.
+	if runtime.GOOS != "windows" {
+		if info.Mode().Perm() != 0o755 {
+			t.Fatalf("permissions = %o, want 755", info.Mode().Perm())
+		}
 	}
 
 	// .old file should be cleaned up
@@ -348,8 +351,11 @@ func TestReplaceBinary_PreservesPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o700 {
-		t.Fatalf("permissions = %o, want 700", info.Mode().Perm())
+	// Windows doesn't support Unix permission bits; skip this check there.
+	if runtime.GOOS != "windows" {
+		if info.Mode().Perm() != 0o700 {
+			t.Fatalf("permissions = %o, want 700", info.Mode().Perm())
+		}
 	}
 }
 
