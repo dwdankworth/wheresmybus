@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -403,7 +404,28 @@ func TestMain_PrintsConfigDirWithoutLoadingConfig(t *testing.T) {
 	}
 }
 
-// Verifies that configuration load failures print setup guidance and exit non-zero.
+// Verifies that -update checks for updates and exits before config loading.
+// Mutation detected: remove the -update branch so the CLI falls through to config loading.
+func TestMain_UpdateExitsBeforeLoadingConfig(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"tag_name":"v9.9.9","assets":[{"name":"wheresmybus_v9.9.9_` + runtime.GOOS + `_` + runtime.GOARCH + `.tar.gz","browser_download_url":"http://localhost/fake"}]}`))
+	}))
+	defer server.Close()
+
+	output, exitCode := runMain(t, map[string]string{
+		"GO_WANT_TEST_VERSION":    "v9.9.9",
+		"GO_WANT_REWRITE_URL":     server.URL,
+		"WHERESMYBUS_UPDATER_URL": server.URL,
+	}, "-update")
+
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, want 0 with output %q", exitCode, output)
+	}
+	if !strings.Contains(output, "Already up to date") {
+		t.Fatalf("output = %q, want 'Already up to date'", output)
+	}
+}
 // Mutation detected: remove the config.Load error handling block so startup failures lose the setup guidance or exit successfully.
 func TestMain_LoadFailurePrintsSetupGuidance(t *testing.T) {
 	emptyHome := t.TempDir()

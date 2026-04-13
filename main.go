@@ -4,10 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/dwdankworth/wheresmybus/internal/api"
 	"github.com/dwdankworth/wheresmybus/internal/config"
 	"github.com/dwdankworth/wheresmybus/internal/display"
+	"github.com/dwdankworth/wheresmybus/internal/updater"
 	"github.com/dwdankworth/wheresmybus/internal/wifi"
 )
 
@@ -21,6 +23,7 @@ func main() {
 	maxResults := flag.Int("max-results", defaultMaxResults, "Maximum number of arrivals to show (0 for all)")
 	printVersion := flag.Bool("version", false, "Print the version and exit")
 	printConfigDir := flag.Bool("print-config-dir", false, "Print the platform-specific config directory and exit")
+	update := flag.Bool("update", false, "Update to the latest release from GitHub")
 	flag.Parse()
 
 	if *printVersion {
@@ -35,6 +38,11 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Println(dir)
+		return
+	}
+
+	if *update {
+		runUpdate(version)
 		return
 	}
 
@@ -124,4 +132,39 @@ func resolveStop(cfg *config.Config, stop, direction string, detectSSID func() (
 		return "", fmt.Errorf("not connected to wifi\nUse: wheresmybus -direction home|office")
 	}
 	return "", fmt.Errorf("unknown wifi network %q\nUse: wheresmybus -direction home|office", ssid)
+}
+
+func runUpdate(currentVersion string) {
+	result, err := updater.Check(nil, currentVersion)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if !result.UpdateAvailable {
+		fmt.Printf("Already up to date (%s).\n", result.LatestVersion)
+		return
+	}
+
+	fmt.Printf("Update available: %s → %s\n", result.CurrentVersion, result.LatestVersion)
+	fmt.Print("Apply update? [y/N] ")
+
+	var answer string
+	if _, err := fmt.Scanln(&answer); err != nil {
+		fmt.Println("\nUpdate cancelled.")
+		return
+	}
+	if strings.ToLower(strings.TrimSpace(answer)) != "y" {
+		fmt.Println("Update cancelled.")
+		return
+	}
+
+	fmt.Print("Downloading...")
+	if err := updater.Apply(nil, result.AssetURL, result.AssetName); err != nil {
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("\rUpdated to %s.   \n", result.LatestVersion)
 }
