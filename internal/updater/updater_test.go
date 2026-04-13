@@ -420,3 +420,322 @@ func createZip(t *testing.T, files map[string][]byte) []byte {
 	}
 	return buf.Bytes()
 }
+
+// currentBinaryName returns the expected binary name for the current platform.
+func currentBinaryName() string {
+	if runtime.GOOS == "windows" {
+		return binaryName + ".exe"
+	}
+	return binaryName
+}
+
+// --- Phase 1: applyToPath tests ---
+
+// Mutation: delete the replaceBinary call in applyToPath → file contents unchanged.
+func TestApplyToPath_DownloadsAndReplacesFromTarGz(t *testing.T) {
+	binContent := []byte("ELF-fake-binary-v0.3.0-linux-amd64")
+	binName := currentBinaryName()
+
+	archive := createTarGz(t, map[string][]byte{
+		"wheresmybus_v0.3.0/" + binName: binContent,
+		"wheresmybus_v0.3.0/README.md":  []byte("# release notes"),
+	})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(archive)
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	execPath := filepath.Join(dir, binName)
+	if err := os.WriteFile(execPath, []byte("old-binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	assetName := "wheresmybus_v0.3.0_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	if err := applyToPath(server.Client(), server.URL, assetName, execPath); err != nil {
+		t.Fatalf("applyToPath error: %v", err)
+	}
+
+	got, err := os.ReadFile(execPath)
+	if err != nil {
+		t.Fatalf("read replaced binary: %v", err)
+	}
+	if !bytes.Equal(got, binContent) {
+		t.Fatalf("binary content = %q, want %q", got, binContent)
+	}
+}
+
+// Mutation: change HasSuffix(assetName, ".zip") to always-false → zip archive sent to tar.gz extractor.
+func TestApplyToPath_DownloadsAndReplacesFromZip(t *testing.T) {
+	binContent := []byte("MZ-fake-binary-v0.3.0-windows-amd64")
+	binName := currentBinaryName()
+
+	archive := createZip(t, map[string][]byte{
+		"wheresmybus_v0.3.0/" + binName: binContent,
+		"wheresmybus_v0.3.0/README.md":  []byte("# release notes"),
+	})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(archive)
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	execPath := filepath.Join(dir, binName)
+	if err := os.WriteFile(execPath, []byte("old-binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	assetName := "wheresmybus_v0.3.0_windows_amd64.zip"
+	if err := applyToPath(server.Client(), server.URL, assetName, execPath); err != nil {
+		t.Fatalf("applyToPath error: %v", err)
+	}
+
+	got, err := os.ReadFile(execPath)
+	if err != nil {
+		t.Fatalf("read replaced binary: %v", err)
+	}
+	if !bytes.Equal(got, binContent) {
+		t.Fatalf("binary content = %q, want %q", got, binContent)
+	}
+}
+
+// Mutation: remove the error check after client.Get → nil pointer dereference.
+func TestApplyToPath_NetworkError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	server.Close() // close immediately to force connection refused
+
+	dir := t.TempDir()
+	execPath := filepath.Join(dir, currentBinaryName())
+	if err := os.WriteFile(execPath, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := applyToPath(server.Client(), server.URL, "asset.tar.gz", execPath)
+	if err == nil {
+		t.Fatal("expected error for closed server")
+	}
+	if !strings.Contains(err.Error(), "download update") {
+		t.Fatalf("error = %q, want wrapping of 'download update'", err.Error())
+	}
+}
+
+// Mutation: remove the StatusCode != 200 check → garbage HTML passed to extractor.
+func TestApplyToPath_HTTPErrorStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"message":"API rate limit exceeded"}`))
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	execPath := filepath.Join(dir, currentBinaryName())
+	if err := os.WriteFile(execPath, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := applyToPath(server.Client(), server.URL, "asset.tar.gz", execPath)
+	if err == nil {
+		t.Fatal("expected error for HTTP 403")
+	}
+	if !strings.Contains(err.Error(), "HTTP 403") {
+		t.Fatalf("error = %q, want mention of HTTP 403", err.Error())
+	}
+}
+
+// Mutation: remove the extract error check → nil binaryData passed to replaceBinary.
+func TestApplyToPath_CorruptArchiveData(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write([]byte("this-is-not-a-valid-gzip-or-tar-archive"))
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	execPath := filepath.Join(dir, currentBinaryName())
+	if err := os.WriteFile(execPath, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := applyToPath(server.Client(), server.URL, "asset.tar.gz", execPath)
+	if err == nil {
+		t.Fatal("expected error for corrupt archive")
+	}
+	if !strings.Contains(err.Error(), "extract binary") {
+		t.Fatalf("error = %q, want wrapping of 'extract binary'", err.Error())
+	}
+
+	// Original binary should be untouched since failure happens before replaceBinary.
+	got, _ := os.ReadFile(execPath)
+	if string(got) != "old" {
+		t.Fatalf("original binary was modified despite extraction failure")
+	}
+}
+
+// --- Phase 2: replaceBinary error path tests ---
+
+// Mutation: remove os.Stat check → panic or incorrect behavior with bogus path.
+func TestReplaceBinary_NonExistentPath(t *testing.T) {
+	dir := t.TempDir()
+	bogusPath := filepath.Join(dir, "nonexistent-binary")
+
+	err := replaceBinary(bogusPath, []byte("new-content"))
+	if err == nil {
+		t.Fatal("expected error for non-existent path")
+	}
+	if !strings.Contains(err.Error(), "stat executable") {
+		t.Fatalf("error = %q, want 'stat executable' wrapping", err.Error())
+	}
+}
+
+// Mutation: remove os.CreateTemp error check → nil pointer dereference on tmpFile.
+func TestReplaceBinary_ReadOnlyDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission model not available on Windows")
+	}
+
+	dir := t.TempDir()
+	execPath := filepath.Join(dir, "wheresmybus")
+	if err := os.WriteFile(execPath, []byte("original"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Make directory read-only so CreateTemp fails.
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+	err := replaceBinary(execPath, []byte("new-content"))
+	if err == nil {
+		t.Fatal("expected error for read-only directory")
+	}
+	if !strings.Contains(err.Error(), "create temp file") {
+		t.Fatalf("error = %q, want 'create temp file' wrapping", err.Error())
+	}
+
+	// Original binary should be untouched.
+	_ = os.Chmod(dir, 0o755)
+	got, _ := os.ReadFile(execPath)
+	if string(got) != "original" {
+		t.Fatal("original binary was modified despite temp file creation failure")
+	}
+}
+
+// Mutation: remove os.Remove(tmpPath) in rename error handler → temp file leaked.
+func TestReplaceBinary_BackupRenameFails_CleansUpTempFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory-as-rename-blocker behavior varies on Windows")
+	}
+
+	dir := t.TempDir()
+	execPath := filepath.Join(dir, "wheresmybus")
+	if err := os.WriteFile(execPath, []byte("original-binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pre-create execPath+".old" as a non-empty directory.
+	// os.Remove(oldPath) silently fails (non-empty dir), then
+	// os.Rename(execPath, oldPath) fails because oldPath is a directory.
+	oldDir := execPath + ".old"
+	if err := os.MkdirAll(oldDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	blocker := filepath.Join(oldDir, "blocker.txt")
+	if err := os.WriteFile(blocker, []byte("prevents removal"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := replaceBinary(execPath, []byte("updated-binary"))
+	if err == nil {
+		t.Fatal("expected error when backup rename fails")
+	}
+	if !strings.Contains(err.Error(), "backup current executable") {
+		t.Fatalf("error = %q, want 'backup current executable' wrapping", err.Error())
+	}
+
+	// Original binary should still be intact.
+	got, readErr := os.ReadFile(execPath)
+	if readErr != nil {
+		t.Fatalf("original binary unreadable: %v", readErr)
+	}
+	if string(got) != "original-binary" {
+		t.Fatalf("original binary content = %q, want %q", got, "original-binary")
+	}
+
+	// Temp file should have been cleaned up.
+	matches, _ := filepath.Glob(filepath.Join(dir, "wheresmybus-update-*"))
+	if len(matches) > 0 {
+		t.Fatalf("temp file not cleaned up: %v", matches)
+	}
+}
+
+// --- Phase 3: Extract error path tests ---
+
+// Mutation: remove gzip.NewReader error check → panic on nil reader.
+func TestExtractFromTarGz_InvalidGzipData(t *testing.T) {
+	_, err := extractFromTarGz([]byte("not-gzip-data-at-all"), "wheresmybus")
+	if err == nil {
+		t.Fatal("expected error for invalid gzip data")
+	}
+	if !strings.Contains(err.Error(), "open gzip") {
+		t.Fatalf("error = %q, want 'open gzip' wrapping", err.Error())
+	}
+}
+
+// Mutation: remove zip.NewReader error check → panic on nil reader.
+func TestExtractFromZip_InvalidZipData(t *testing.T) {
+	_, err := extractFromZip([]byte("not-a-zip-file-at-all"), "wheresmybus.exe")
+	if err == nil {
+		t.Fatal("expected error for invalid zip data")
+	}
+	if !strings.Contains(err.Error(), "open zip") {
+		t.Fatalf("error = %q, want 'open zip' wrapping", err.Error())
+	}
+}
+
+// --- Phase 4: CheckFromURL edge case ---
+
+// Mutation: remove json.Decode error check → proceeds with zero-value release, wrongly
+// reports "no update available" for any version string.
+func TestCheckFromURL_MalformedJSONResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("<html>unexpected error page</html>"))
+	}))
+	defer server.Close()
+
+	_, err := CheckFromURL(server.Client(), server.URL, "v0.1.0")
+	if err == nil {
+		t.Fatal("expected error for malformed JSON response")
+	}
+	if !strings.Contains(err.Error(), "decode release") {
+		t.Fatalf("error = %q, want 'decode release' wrapping", err.Error())
+	}
+}
+
+// Mutation: remove Accept header → GitHub might return a different format in the future.
+func TestCheckFromURL_SetsAcceptHeader(t *testing.T) {
+	var gotAccept string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAccept = r.Header.Get("Accept")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(githubRelease{
+			TagName: "v0.1.0",
+			Assets:  testAssetsForCurrentPlatform("v0.1.0"),
+		})
+	}))
+	defer server.Close()
+
+	_, err := CheckFromURL(server.Client(), server.URL, "v0.1.0")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotAccept != "application/vnd.github+json" {
+		t.Fatalf("Accept header = %q, want %q", gotAccept, "application/vnd.github+json")
+	}
+}

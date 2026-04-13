@@ -130,9 +130,9 @@ chmod +x ~/.local/bin/wheresmybus
 **macOS**
 
 ```sh
-sudo mkdir -p /usr/local/bin
-sudo cp ./wheresmybus /usr/local/bin/wheresmybus
-sudo chmod +x /usr/local/bin/wheresmybus
+sudo mkdir -p /usr/.local/bin
+sudo cp ./wheresmybus /usr/.local/bin/wheresmybus
+sudo chmod +x /usr/.local/bin/wheresmybus
 ```
 
 **Windows (PowerShell)**
